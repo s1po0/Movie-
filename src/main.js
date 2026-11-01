@@ -1,7 +1,6 @@
 import './style.css';
 import Hls from 'hls.js';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { Browser } from '@capacitor/browser';
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { createIcons, icons } from 'lucide';
 import { parseSubtitles, toVtt } from './subtitles.js';
 import { translationGroups, translationUrl, translatedText, translateGroup } from './translate.js';
@@ -11,6 +10,7 @@ import { searchUrl, searchResults, metadataUrl, archiveFiles } from './archive.j
 import { isDonkeyPage, donkeyHome } from './donkey.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
+const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const app = document.querySelector('#app');
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {};
@@ -41,7 +41,7 @@ function render() {
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <button class="ghost donkey-link" data-action="donkey">${icon('external-link')} کردنەوەی Donkey.to</button><p class="catalog-notice">فیلمە بەردەستەکان لە Internet Archive و Blender پەخش دەکرێن؛ هەموو فیلمەکانی جیهان یان ژێرنووس بۆ هەموو فیلمێک بەردەست نین.</p>
+          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلمەکانی Donkey</button><p class="catalog-notice">فیلمە بەردەستەکان لە Internet Archive و Blender پەخش دەکرێن؛ هەموو فیلمەکانی جیهان یان ژێرنووس بۆ هەموو فیلمێک بەردەست نین.</p>
           <div id="catalog-cards" class="catalog-cards">${catalogCards(searchMovies(''))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
@@ -65,7 +65,7 @@ function catalogCards(items) {
 function openModal(content) { const m = document.querySelector('#modal'); m.innerHTML = `<div class="dialog">${content}</div>`; m.classList.remove('hidden'); paintIcons(); }
 function closeModal() { document.querySelector('#modal').classList.add('hidden'); }
 function addDialog() {
-  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک لە Donkey دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری DIMO، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی Donkey لە ماڵپەڕی خۆیدا دەکرێتەوە و ژێرنووسی DIMO بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک لە Donkey دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری DIMO، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی Donkey لە پلەیەری ماڵپەڕەکە دەکرێتەوە؛ ژێرنووسی DIMO بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
 }
 function helpDialog() { openModal(`<div class="dialog-header"><div><span class="overline">HOW IT WORKS</span><h2>چۆن کار دەکات؟</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><div class="help-list"><p><b>١</b><span>لینکی ڕاستەوخۆی ستریمەکەت زیاد بکە و فیلمەکە بکەرەوە.</span></p><p><b>٢</b><span>فایلی ژێرنووسی SRT یان VTT هەڵبژێرە، یان لینکی ژێرنووس دابنێ.</span></p><p><b>٣</b><span>زمان هەڵبژێرە و دوگمەی وەرگێڕان دابگرە؛ پێویست بە کلیل یان پارەدان نییە.</span></p></div><p class="form-hint">ژێرنووسەکان بۆ Google دەنێردرێن. خزمەتگوزارییە بەخۆڕاییەکە فەرمی نییە؛ لەوانەیە سنووردار بکرێت یان بوەستێت. هەندێک ستریم یان زمان لەوانەیە پشتگیری نەکرێت.</p>`); }
 function toast(message) { const el = document.querySelector('.toast'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 4500); }
@@ -73,7 +73,7 @@ function validUrl(url) { try { return new URL(url).protocol === 'https:'; } catc
 async function openDonkey(url) {
   if (!isDonkeyPage(url)) return;
   try {
-    if (Capacitor.isNativePlatform()) await Browser.open({ url });
+    if (Capacitor.isNativePlatform()) await DonkeyPlayer.open({ url });
     else window.open(url, '_blank', 'noopener,noreferrer');
   } catch { toast('ماڵپەڕەکە نەکرایەوە.'); }
 }
