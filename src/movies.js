@@ -4,15 +4,6 @@ const languageNames = { afr: 'Afrikaans', ara: 'العربية', bra: 'Portuguê
 const sidecars = (folder, languages) => languages.map(code => ({
   label: languageNames[code], url: `${mediaRoot}/${folder}/subtitles/${folder}.NoMercy.${code}.full.vtt`,
 }));
-const hlsMovie = (id, title, type, folder, languages, credit, license, url) => ({
-  id, title, type, year: folder.match(/\((\d{4})\)$/)?.[1],
-  poster: `https://archive.org/services/img/${({ 'open-cosmos': 'cosmos-laundromat-first-cycle', 'open-agent327': 'agent327operationbarbershop', 'open-glass-half': 'GlassHalf1080p', 'open-spring': 'spring_blenderopenmovie' })[id]}`,
-  url: url || `${mediaRoot}/${folder}/${folder}.NoMercy.m3u8`,
-  subtitles: sidecars(folder, languages), credit,
-  licenseUrl: `https://creativecommons.org/licenses/by/${license}/`,
-  attributionUrl: `https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md`,
-});
-
 // Free-to-watch Blender Foundation open movies. The video and sidecars remain on their hosts.
 export const openMovies = [
   {
@@ -46,14 +37,7 @@ export const openMovies = [
     attributionUrl: 'https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md',
     subtitles: sidecars('Tears.of.Steel.(2012)', ['bra', 'chi', 'cro', 'cze', 'dan', 'dut', 'fre', 'ger', 'gre', 'heb', 'hun', 'ind', 'ita', 'jpn', 'nor', 'per', 'por', 'rus', 'spa']),
   },
-  hlsMovie('open-cosmos', 'Cosmos Laundromat', 'ئەنیمەیشن · خەیاڵی', 'Cosmos.Laundromat.(2015)',
-    ['eng', 'dut', 'fre', 'ita', 'pob', 'spa'], '© 2015 Blender Foundation / Blender Institute · Directed by Mathieu Auvray · CC BY 3.0', '3.0'),
-  hlsMovie('open-agent327', 'Agent 327: Operation Barbershop', 'ئەنیمەیشن · ئەکشن', 'Agent.327.Operation.Barbershop.(2017)',
-    ['eng', 'dut'], '© 2017 Blender Foundation / Blender Institute · CC BY 4.0', '4.0'),
-  hlsMovie('open-glass-half', 'Glass Half', 'ئەنیمەیشن · کۆمیدی', 'Glass.Half.(2015)',
-    ['eng', 'afr', 'ara', 'chi', 'dan', 'dut', 'fre', 'ger', 'hin', 'ind', 'jpn', 'lit', 'nob', 'pol', 'por', 'ron', 'srp', 'tam', 'tel', 'tur', 'vie'], '© 2015 Blender Foundation / Blender Institute · Directed by Beorn Leonard · CC BY 3.0', '3.0'),
-  hlsMovie('open-spring', 'Spring', 'ئەنیمەیشن · خەیاڵی', 'Spring.(2019)',
-    ['eng', 'ara', 'dut', 'hin', 'hun', 'ind', 'jpn', 'kor', 'lit', 'pol', 'por', 'spa', 'srp', 'tur'], '© 2019 Blender Foundation / Blender Institute · Directed by Andy Goralczyk · CC BY 4.0', '4.0'),
+
 ];
 
 // Publicly accessible Internet Archive items. Only direct video URLs are stored;
