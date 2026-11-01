@@ -6,7 +6,7 @@ Sintel and Tears of Steel use HLS. Film credits and the corresponding Creative C
 
 His Girl Friday and the Sherlock Holmes episodes also attempt to load English subtitles automatically (the Archive captions are machine-generated). If the subtitle server or browser CORS blocks them, load an SRT/VTT file manually. Remote stream manifests and subtitle files were checked, but playback and subtitle synchronization have not been tested on Android.
 
-The Dark Knight is listed from the requested site and its TMDB ID is resolved on demand via one of that site's player sources. The response supplies temporary video URLs and subtitle tracks; URLs are not saved because they expire. The observed source returned HEVC MP4, **not M3U8**, and marked the video as requiring a proxy. This app does not yet provide that proxy: playback may fail due to CORS, server restrictions, or lack of HEVC support. Source resolution was checked against the provider, but playback and subtitle timing were not tested on Android. The provider can change or remove the endpoint without notice. This is one listed title, not the full site catalogue.
+The Dark Knight is listed from the requested site and opens one of that site's third-party players inside the app. Use that player's own play and subtitle controls; DIMO subtitle upload and translation do not work inside the embedded player. The provider may block embedding or remove the film, and playback has not been verified in the external preview or on Android. This is not a direct M3U8 integration or the full site catalogue.
 
 ## Run and build
 

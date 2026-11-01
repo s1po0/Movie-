@@ -8,7 +8,7 @@ import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { searchUrl, searchResults, metadataUrl, archiveFiles } from './archive.js';
 import { isDonkeyPage, donkeyHome } from './donkey.js';
-import { movieSourceUrl, movieSources } from './vidlink.js';
+import { movieEmbedUrl } from './vidlink.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
@@ -152,31 +152,16 @@ function playDirect(url, format) {
   } else video.src = url;
   video.play().catch(() => {});
 }
-async function loadMovieSource(movie, session, initialSubtitleRequest) {
-  const message = document.querySelector('#player-message');
-  message.textContent = 'لینکی فیلم و ژێرنووسەکان بار دەکرێن...';
-  try {
-    const data = movieSources(await getJson(movieSourceUrl(movie.tmdbId)));
-    if (session !== playerSession) return;
-    if (!data.source) { message.textContent = 'لینکی پەخش بۆ ئەم فیلمە بەردەست نییە.'; return; }
-    playDirect(data.source.url, data.source.type);
-    message.textContent = data.source.requiresProxy
-      ? 'پەخشەکە ڕەنگە پێویستی بە پرۆکسی یان کۆدێکی HEVC هەبێت و لە هەندێک ئامێر کار نەکات.'
-      : 'پەخش و ژێرنووس بە بەردەستبوونی سەرچاوەکە پەیوەستن.';
-    addSubtitleSources(data.subtitles);
-    if (data.subtitles.length && !originalCues && subtitleRequest === initialSubtitleRequest) {
-      const preferred = data.subtitles.find(track => /^(english|en)$/i.test(track.label)) || data.subtitles[0];
-      document.querySelector('#subtitle-source').value = preferred.url;
-      loadSubtitleUrl(preferred.url);
-    }
-  } catch {
-    if (session === playerSession) message.textContent = 'لینکی فیلم بار نەبوو؛ سەرچاوەکە یان ئینتەرنێت بپشکنە.';
-  }
-}
 function openPlayer(movie) {
   if (!movie) return;
   playerSession++; subtitleRequest++; current = movie; originalCues = null; translations = {};
   const modal = document.querySelector('#player-modal');
+  if (movie.tmdbId) {
+    const url = movieEmbedUrl(movie.tmdbId);
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><iframe src="${url}" title="${escapeHtml(movie.title)}" sandbox="allow-scripts allow-same-origin allow-presentation" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div><p class="player-message">دوگمەی پەخش لە ناو پلەیەرەکە دابگرە. ژێرنووس لە ڕێکخستنەکانی ئەو پلەیەرە هەڵبژێرە؛ وەرگێڕانی DIMO لێرە کار ناکات. بەردەستبوونی فیلم بە سەرچاوەکە پەیوەستە.</p><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">ئەگەر پلەیەرەکە نەکرایەوە، لە پەڕەیەکی تر بیکەرەوە ↗</a></div>`;
+    modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
+    return;
+  }
   modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><video id="video" controls playsinline></video></div><div id="player-message" class="player-message">${movie.credit ? `${escapeHtml(movie.credit)}${movie.attributionUrl ? ` · <a href="${escapeHtml(movie.attributionUrl)}" target="_blank" rel="noopener noreferrer">HLS attribution ↗</a>` : ''} · <a href="${escapeHtml(movie.licenseUrl || `https://creativecommons.org/licenses/${movie.id === 'sample-dream' ? 'by/2.5/' : 'by/3.0/'}`)}" target="_blank" rel="noopener noreferrer">License ↗</a>` : movie.sourcePage ? `Internet Archive · <a href="${escapeHtml(movie.sourcePage)}" target="_blank" rel="noopener noreferrer">سەرچاوە ↗</a>` : 'ئەگەر ستریمەکە کار نەکرد، لینک و ئینتەرنێت بپشکنە.'}</div><div class="subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>ژێرنووس</h3><p id="subtitle-status">ژێرنووسێک هەڵبژێرە یان بار بکە</p></div></div><label class="upload-button">${icon('upload')} بارکردنی فایل<input id="subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label id="subtitle-source-label" class="hidden">فایلی ژێرنووسی فیلم<select id="subtitle-source"><option value="">ژێرنووس هەڵبژێرە</option></select></label><label>ژێرنووسی بەردەست<select id="track-select"><option value="off">کوژاندنەوە</option></select></label><label>زمانی وەرگێڕان<select id="language">${languages.map(([code, name]) => `<option value="${code}">${escapeHtml(name)}</option>`).join('')}<option value="custom">زمانێکی تر…</option></select></label><label id="custom-language-label" class="hidden">کۆدی زمان <input id="custom-language" dir="ltr" placeholder="e.g. it"></label></div><details class="translate-details"><summary>${icon('languages')} وەرگێڕانی ژێرنووس بە Google</summary><p>فایلی ژێرنووس بار بکە و زمان هەڵبژێرە. وەرگێڕان بەخۆڕاییە و پێویستی بە کلیل نییە؛ ژێرنووسەکان بۆ Google دەنێردرێن.</p><div class="translate-row"><button class="primary" id="translate">${icon('sparkles')} وەرگێڕان</button></div><p id="translation-status" class="form-hint" role="status"></p></details></div></div>`;
   modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
   const video = document.querySelector('#video');
@@ -193,7 +178,6 @@ function openPlayer(movie) {
   }
   const archiveId = movie.archiveId || (movie.id.startsWith('archive-') ? movie.id.slice(8) : null);
   if (archiveId) loadArchiveItem(archiveId, movie, session, subtitleRequest);
-  if (movie.tmdbId) loadMovieSource(movie, session, subtitleRequest);
 }
 function closePlayer() { playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
 function refreshTracks() {

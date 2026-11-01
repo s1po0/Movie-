@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { movieSourceUrl, movieSources } from '../src/vidlink.js';
+import { movieEmbedUrl, movieSourceUrl, movieSources } from '../src/vidlink.js';
+
+test('builds a player embed URL only for numeric movie IDs', () => {
+  assert.equal(movieEmbedUrl('155'), 'https://vidlink.pro/movie/155');
+  assert.throws(() => movieEmbedUrl('../155'));
+  assert.throws(() => movieEmbedUrl('155?x=1'));
+});
 
 test('creates a short-lived source request for a valid TMDB movie id', () => {
   assert.equal(movieSourceUrl('155', 1700000000000), 'https://vidlink.pro/api/b/movie/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQXwUvTSIhfLnqUzrHA0Z98GGDf5NQFZ8ijaq?multiLang=1');

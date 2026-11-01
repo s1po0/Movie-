@@ -10,6 +10,12 @@ const safeUrl = value => {
   } catch { return null; }
 };
 
+export function movieEmbedUrl(id) {
+  const text = String(id);
+  if (!/^\d{1,12}$/.test(text)) throw new Error('Invalid movie identifier');
+  return `https://vidlink.pro/movie/${text}`;
+}
+
 export function movieSourceUrl(id, now = Date.now()) {
   const text = String(id);
   if (!/^\d{1,12}$/.test(text) || !Number.isFinite(now) || now < 0) throw new Error('Invalid movie identifier');
