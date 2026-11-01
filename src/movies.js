@@ -1,4 +1,19 @@
-// Free-to-watch Blender Foundation open movies, streamed from Google's sample bucket.
+// Sidecar captions from NoMercy's HLS encodes of the Blender open movies.
+const mediaRoot = 'https://raw.githubusercontent.com/NoMercy-Entertainment/nomercy-media/master/Films';
+const languageNames = { afr: 'Afrikaans', ara: 'العربية', bra: 'Português (Brasil)', chi: '中文', cro: 'Hrvatski', cze: 'Čeština', dan: 'Dansk', dut: 'Nederlands', eng: 'English', fre: 'Français', ger: 'Deutsch', gre: 'Ελληνικά', heb: 'עברית', hin: 'हिन्दी', hun: 'Magyar', ind: 'Bahasa Indonesia', ita: 'Italiano', jpn: '日本語', kor: '한국어', lit: 'Lietuvių', nob: 'Norsk', nor: 'Norsk', per: 'فارسی', pob: 'Português (Brasil)', pol: 'Polski', por: 'Português', ron: 'Română', rus: 'Русский', spa: 'Español', srp: 'Српски', swe: 'Svenska', tam: 'தமிழ்', tel: 'తెలుగు', tur: 'Türkçe', vie: 'Tiếng Việt' };
+const sidecars = (folder, languages) => languages.map(code => ({
+  label: languageNames[code], url: `${mediaRoot}/${folder}/subtitles/${folder}.NoMercy.${code}.full.vtt`,
+}));
+const hlsMovie = (id, title, type, folder, languages, credit, license, url) => ({
+  id, title, type, year: folder.match(/\((\d{4})\)$/)?.[1],
+  poster: `https://archive.org/services/img/${({ 'open-cosmos': 'cosmos-laundromat-first-cycle', 'open-agent327': 'agent327operationbarbershop', 'open-glass-half': 'GlassHalf1080p', 'open-spring': 'spring_blenderopenmovie' })[id]}`,
+  url: url || `${mediaRoot}/${folder}/${folder}.NoMercy.m3u8`,
+  subtitles: sidecars(folder, languages), credit,
+  licenseUrl: `https://creativecommons.org/licenses/by/${license}/`,
+  attributionUrl: `https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md`,
+});
+
+// Free-to-watch Blender Foundation open movies. The video and sidecars remain on their hosts.
 export const openMovies = [
   {
     id: 'sample-bunny', title: 'Big Buck Bunny', type: 'ئەنیمەیشن · کۆمیدی',
@@ -10,21 +25,35 @@ export const openMovies = [
     id: 'sample-dream', title: 'Elephants Dream', type: 'ئەنیمەیشن · خەیاڵی',
     url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
     poster: 'https://storage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg',
-    credit: '© 2006 Blender Foundation · Directed by Bassam Kurdali · CC BY 2.5',
+    credit: '© 2006 Blender Foundation / Netherlands Media Art Institute · Directed by Bassam Kurdali · CC BY 2.5',
+    attributionUrl: 'https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md',
+    subtitles: sidecars('Elephants.Dream.(2006)', ['eng', 'ara', 'dut', 'jpn', 'rus', 'swe']),
   },
   {
     id: 'open-sintel', title: 'Sintel', type: 'ئەنیمەیشن · خەیاڵی',
-    url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    url: 'https://s.fastmotion.io/1752fa30-009a-47a0-a5fd-bdf19fcb77f5/playlist.m3u8',
     poster: 'https://storage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg',
     credit: '© 2010 Blender Foundation · Directed by Colin Levy · CC BY 3.0',
+    attributionUrl: 'https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md',
+    subtitles: sidecars('Sintel.(2010)', ['eng', 'dut', 'fre', 'ger', 'ita', 'pol', 'por', 'rus', 'spa']),
   },
   {
     id: 'open-tears', title: 'Tears of Steel', type: 'زانستی خەیاڵی · دراما',
-    url: 'https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    url: 'https://s.fastmotion.io/cd7ec8f0-3136-41cd-bb8b-117edb7cda39/playlist.m3u8',
     poster: 'https://storage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
     subtitle: 'https://download.blender.org/demo/movies/ToS/subtitles/TOS-en.srt',
     credit: '© 2012 Blender Foundation · Directed by Ian Hubert · CC BY 3.0',
+    attributionUrl: 'https://github.com/NoMercy-Entertainment/nomercy-media/blob/master/Films/ATTRIBUTION.md',
+    subtitles: sidecars('Tears.of.Steel.(2012)', ['bra', 'chi', 'cro', 'cze', 'dan', 'dut', 'fre', 'ger', 'gre', 'heb', 'hun', 'ind', 'ita', 'jpn', 'nor', 'per', 'por', 'rus', 'spa']),
   },
+  hlsMovie('open-cosmos', 'Cosmos Laundromat', 'ئەنیمەیشن · خەیاڵی', 'Cosmos.Laundromat.(2015)',
+    ['eng', 'dut', 'fre', 'ita', 'pob', 'spa'], '© 2015 Blender Foundation / Blender Institute · Directed by Mathieu Auvray · CC BY 3.0', '3.0'),
+  hlsMovie('open-agent327', 'Agent 327: Operation Barbershop', 'ئەنیمەیشن · ئەکشن', 'Agent.327.Operation.Barbershop.(2017)',
+    ['eng', 'dut'], '© 2017 Blender Foundation / Blender Institute · CC BY 4.0', '4.0'),
+  hlsMovie('open-glass-half', 'Glass Half', 'ئەنیمەیشن · کۆمیدی', 'Glass.Half.(2015)',
+    ['eng', 'afr', 'ara', 'chi', 'dan', 'dut', 'fre', 'ger', 'hin', 'ind', 'jpn', 'lit', 'nob', 'pol', 'por', 'ron', 'srp', 'tam', 'tel', 'tur', 'vie'], '© 2015 Blender Foundation / Blender Institute · Directed by Beorn Leonard · CC BY 3.0', '3.0'),
+  hlsMovie('open-spring', 'Spring', 'ئەنیمەیشن · خەیاڵی', 'Spring.(2019)',
+    ['eng', 'ara', 'dut', 'hin', 'hun', 'ind', 'jpn', 'kor', 'lit', 'pol', 'por', 'spa', 'srp', 'tur'], '© 2019 Blender Foundation / Blender Institute · Directed by Andy Goralczyk · CC BY 4.0', '4.0'),
 ];
 
 // Publicly accessible Internet Archive items. Only direct video URLs are stored;
