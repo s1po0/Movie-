@@ -1,12 +1,14 @@
 import './style.css';
 import Hls from 'hls.js';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { createIcons, icons } from 'lucide';
 import { parseSubtitles, toVtt } from './subtitles.js';
 import { translationGroups, translationUrl, translatedText, translateGroup } from './translate.js';
 import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { searchUrl, searchResults, metadataUrl, archiveFiles } from './archive.js';
+import { isDonkeyPage, donkeyHome } from './donkey.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const app = document.querySelector('#app');
@@ -39,13 +41,13 @@ function render() {
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <p class="catalog-notice">فیلمە بەردەستەکان لە Internet Archive و Blender پەخش دەکرێن؛ هەموو فیلمەکانی جیهان یان ژێرنووس بۆ هەموو فیلمێک بەردەست نین.</p>
+          <button class="ghost donkey-link" data-action="donkey">${icon('external-link')} کردنەوەی Donkey.to</button><p class="catalog-notice">فیلمە بەردەستەکان لە Internet Archive و Blender پەخش دەکرێن؛ هەموو فیلمەکانی جیهان یان ژێرنووس بۆ هەموو فیلمێک بەردەست نین.</p>
           <div id="catalog-cards" class="catalog-cards">${catalogCards(searchMovies(''))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
         <section class="library" id="library">
           <div class="section-head"><div><span class="overline">YOUR COLLECTION</span><h2>کتێبخانەی تۆ <span>✦</span></h2><p>لینکی فیلمەکانی خۆت لێرە زیاد بکە.</p></div><button class="text-button" data-action="add">زیادکردنی فیلم ${icon('arrow-up-left')}</button></div>
-          <div class="cards">${cards.map((movie, i) => `<article class="movie-card"><button class="poster ${escapeHtml(movie.color || ['gold','plum','blue'][i%3])}" ${movie.poster ? `style="background-image:linear-gradient(0deg, #101510a8, transparent 55%),url('${escapeHtml(movie.poster)}');background-size:cover;background-position:center"` : ''} data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><span class="poster-label">${movie.credit ? 'FREE MOVIE' : 'MY MOVIE'}</span><span class="poster-art">${icon('clapperboard')}</span><span class="poster-play">${icon('play')}</span><span class="poster-bottom">DIMO <span>✦</span></span></button><div class="card-info"><div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p>${escapeHtml(movie.type || 'فیلمی من')} <span>•</span> STREAMING</p></div>${movie.credit ? '' : `<button class="delete" data-delete="${escapeHtml(movie.id)}" aria-label="سڕینەوەی ${escapeHtml(movie.title)}">${icon('trash-2')}</button>`}</div></article>`).join('')}<button class="add-card" data-action="add"><span>${icon('plus')}</span><strong>فیلمێکی نوێ زیاد بکە</strong><small>لینکی خۆت دابنێ</small></button></div>
+          <div class="cards">${cards.map((movie, i) => `<article class="movie-card"><button class="poster ${escapeHtml(movie.color || ['gold','plum','blue'][i%3])}" ${movie.poster ? `style="background-image:linear-gradient(0deg, #101510a8, transparent 55%),url('${escapeHtml(movie.poster)}');background-size:cover;background-position:center"` : ''} data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><span class="poster-label">${isDonkeyPage(movie.url) ? 'DONKEY ↗' : movie.credit ? 'FREE MOVIE' : 'MY MOVIE'}</span><span class="poster-art">${icon('clapperboard')}</span><span class="poster-play">${icon('play')}</span><span class="poster-bottom">DIMO <span>✦</span></span></button><div class="card-info"><div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p>${escapeHtml(movie.type || 'فیلمی من')} <span>•</span> STREAMING</p></div>${movie.credit ? '' : `<button class="delete" data-delete="${escapeHtml(movie.id)}" aria-label="سڕینەوەی ${escapeHtml(movie.title)}">${icon('trash-2')}</button>`}</div></article>`).join('')}<button class="add-card" data-action="add"><span>${icon('plus')}</span><strong>فیلمێکی نوێ زیاد بکە</strong><small>لینکی خۆت دابنێ</small></button></div>
         </section>
         <section class="note"><div class="note-icon">${icon('sparkles')}</div><div><strong>هەر چیرۆکێک، بە زمانی خۆت.</strong><p>ژێرنووسێک بار بکە و بە Google Translate وەری بگێڕە بۆ زمانی دڵخوازت.</p></div><button class="text-button" data-action="help">چۆن کار دەکات؟ ${icon('arrow-up-left')}</button></section>
       </main>
@@ -63,11 +65,18 @@ function catalogCards(items) {
 function openModal(content) { const m = document.querySelector('#modal'); m.innerHTML = `<div class="dialog">${content}</div>`; m.classList.remove('hidden'); paintIcons(); }
 function closeModal() { document.querySelector('#modal').classList.add('hidden'); }
 function addDialog() {
-  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی ڕاستەوخۆی فیلم یان ستریمێک دابنێ کە مافی بینینت هەیە.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS (.m3u8) بێت؛ لینکی ماڵپەڕی فیلم کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک لە Donkey دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری DIMO، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی Donkey لە ماڵپەڕی خۆیدا دەکرێتەوە و ژێرنووسی DIMO بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
 }
 function helpDialog() { openModal(`<div class="dialog-header"><div><span class="overline">HOW IT WORKS</span><h2>چۆن کار دەکات؟</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><div class="help-list"><p><b>١</b><span>لینکی ڕاستەوخۆی ستریمەکەت زیاد بکە و فیلمەکە بکەرەوە.</span></p><p><b>٢</b><span>فایلی ژێرنووسی SRT یان VTT هەڵبژێرە، یان لینکی ژێرنووس دابنێ.</span></p><p><b>٣</b><span>زمان هەڵبژێرە و دوگمەی وەرگێڕان دابگرە؛ پێویست بە کلیل یان پارەدان نییە.</span></p></div><p class="form-hint">ژێرنووسەکان بۆ Google دەنێردرێن. خزمەتگوزارییە بەخۆڕاییەکە فەرمی نییە؛ لەوانەیە سنووردار بکرێت یان بوەستێت. هەندێک ستریم یان زمان لەوانەیە پشتگیری نەکرێت.</p>`); }
 function toast(message) { const el = document.querySelector('.toast'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 4500); }
 function validUrl(url) { try { return new URL(url).protocol === 'https:'; } catch { return false; } }
+async function openDonkey(url) {
+  if (!isDonkeyPage(url)) return;
+  try {
+    if (Capacitor.isNativePlatform()) await Browser.open({ url });
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  } catch { toast('ماڵپەڕەکە نەکرایەوە.'); }
+}
 function findMovie(id) { return [...library, ...movies, ...discovery].find(m => m.id === id); }
 async function getJson(url) {
   if (Capacitor.isNativePlatform()) {
@@ -212,8 +221,9 @@ async function translateCues() {
 }
 app.addEventListener('click', e => {
   const action = e.target.closest('[data-action]')?.dataset.action;
+  if (action === 'donkey') openDonkey(donkeyHome);
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
-  const play = e.target.closest('[data-play]'); if (play) openPlayer(findMovie(play.dataset.play));
+  const play = e.target.closest('[data-play]'); if (play) { const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
   const del = e.target.closest('[data-delete]'); if (del && confirm('ئەم فیلمە لە کتێبخانە بسڕدرێتەوە؟')) { library = library.filter(m => m.id !== del.dataset.delete); saveLibrary(); render(); toast('فیلمەکە سڕایەوە.'); }
   if (e.target.closest('#translate')) translateCues();
   if (e.target.closest('#more-movies')) loadDiscovery(discoveryQuery, discoveryPage + 1);
@@ -222,7 +232,7 @@ app.addEventListener('click', e => {
 app.addEventListener('submit', e => {
   if (e.target.id !== 'add-form') return; e.preventDefault(); const form = new FormData(e.target); const title = String(form.get('title')).trim(), url = String(form.get('url')).trim(), subtitle = String(form.get('subtitle')).trim();
   if (!title || !validUrl(url) || (subtitle && !validUrl(subtitle))) { toast('ناو و لینکێکی دروست بنووسە.'); return; }
-  library.unshift({ id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, title, url, subtitle, type: 'فیلمی من' }); saveLibrary(); closeModal(); render(); toast('فیلمەکە زیادکرا.');
+  library.unshift({ id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, title, url, subtitle: isDonkeyPage(url) ? '' : subtitle, type: isDonkeyPage(url) ? 'ماڵپەڕی Donkey' : 'فیلمی من' }); saveLibrary(); closeModal(); render(); toast('فیلمەکە زیادکرا.');
 });
 app.addEventListener('input', e => {
   if (e.target.id !== 'catalog-search') return;
