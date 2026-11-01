@@ -7,6 +7,7 @@ test('catalog movies have unique identifiers and direct HTTPS movie links', () =
   assert.ok(classicMovies.length >= 8);
   assert.equal(new Set(movies.map(movie => movie.id)).size, movies.length);
   for (const movie of movies) {
+    if (movie.tmdbId) { assert.match(movie.tmdbId, /^\d+$/); continue; }
     assert.equal(new URL(movie.url).protocol, 'https:');
     assert.match(new URL(movie.url).pathname, /\.(?:mp4|m3u8)$/i);
     assert.ok(movie.title && (movie.credit || movie.sourcePage));

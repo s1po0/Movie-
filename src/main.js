@@ -8,6 +8,7 @@ import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { searchUrl, searchResults, metadataUrl, archiveFiles } from './archive.js';
 import { isDonkeyPage, donkeyHome } from './donkey.js';
+import { movieSourceUrl, movieSources } from './vidlink.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
@@ -41,7 +42,7 @@ function render() {
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلم و درامای زیاتر</button><p class="catalog-notice">فیلمە بەردەستەکان لە Internet Archive و Blender پەخش دەکرێن؛ هەموو فیلمەکانی جیهان یان ژێرنووس بۆ هەموو فیلمێک بەردەست نین.</p>
+          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلم و درامای زیاتر</button><p class="catalog-notice">بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە؛ هەموو فیلمێک بەردەست نییە.</p>
           <div id="catalog-cards" class="catalog-cards">${catalogCards(searchMovies(''))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
@@ -142,6 +143,36 @@ async function loadArchiveItem(id, movie, session, initialSubtitleRequest) {
     if (session === playerSession && !movie.url) message.textContent = 'لینکی فیلم بار نەبوو؛ ئینتەرنێت یان بەردەستبوونی سەرچاوەکە بپشکنە.';
   }
 }
+function playDirect(url, format) {
+  const video = document.querySelector('#video');
+  if (!video) return;
+  if ((format === 'hls' || /\.m3u8(?:[?#]|$)/i.test(url)) && Hls.isSupported()) {
+    hls = new Hls(); hls.loadSource(url); hls.attachMedia(video);
+    hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) document.querySelector('#player-message').textContent = 'ستریمەکە بار نەبوو؛ لینک و دەستڕاگەیشتنی CORS بپشکنە.'; });
+  } else video.src = url;
+  video.play().catch(() => {});
+}
+async function loadMovieSource(movie, session, initialSubtitleRequest) {
+  const message = document.querySelector('#player-message');
+  message.textContent = 'لینکی فیلم و ژێرنووسەکان بار دەکرێن...';
+  try {
+    const data = movieSources(await getJson(movieSourceUrl(movie.tmdbId)));
+    if (session !== playerSession) return;
+    if (!data.source) { message.textContent = 'لینکی پەخش بۆ ئەم فیلمە بەردەست نییە.'; return; }
+    playDirect(data.source.url, data.source.type);
+    message.textContent = data.source.requiresProxy
+      ? 'پەخشەکە ڕەنگە پێویستی بە پرۆکسی یان کۆدێکی HEVC هەبێت و لە هەندێک ئامێر کار نەکات.'
+      : 'پەخش و ژێرنووس بە بەردەستبوونی سەرچاوەکە پەیوەستن.';
+    addSubtitleSources(data.subtitles);
+    if (data.subtitles.length && !originalCues && subtitleRequest === initialSubtitleRequest) {
+      const preferred = data.subtitles.find(track => /^(english|en)$/i.test(track.label)) || data.subtitles[0];
+      document.querySelector('#subtitle-source').value = preferred.url;
+      loadSubtitleUrl(preferred.url);
+    }
+  } catch {
+    if (session === playerSession) message.textContent = 'لینکی فیلم بار نەبوو؛ سەرچاوەکە یان ئینتەرنێت بپشکنە.';
+  }
+}
 function openPlayer(movie) {
   if (!movie) return;
   playerSession++; subtitleRequest++; current = movie; originalCues = null; translations = {};
@@ -151,11 +182,9 @@ function openPlayer(movie) {
   const video = document.querySelector('#video');
   video.addEventListener('error', () => { document.querySelector('#player-message').textContent = 'ستریمەکە کار نەکرد. لینک، ئینتەرنێت و پشتگیری فرۆمات بپشکنە.'; });
   const session = playerSession;
-  if (movie.url && /\.m3u8(?:[?#]|$)/i.test(movie.url) && Hls.isSupported()) { hls = new Hls(); hls.loadSource(movie.url); hls.attachMedia(video); hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) document.querySelector('#player-message').textContent = 'ستریمەکە بار نەبوو؛ لینک و دەستڕاگەیشتنی CORS بپشکنە.'; }); }
-  else if (movie.url) video.src = movie.url;
+  if (movie.url) playDirect(movie.url);
   video.textTracks.addEventListener('addtrack', refreshTracks);
   video.textTracks.addEventListener('removetrack', refreshTracks);
-  if (movie.url) video.play().catch(() => {});
   const sources = [...(movie.subtitle ? [{ label: 'ژێرنووسی سەرچاوە', url: movie.subtitle }] : []), ...(movie.subtitles || [])];
   if (sources.length) {
     addSubtitleSources(sources);
@@ -164,6 +193,7 @@ function openPlayer(movie) {
   }
   const archiveId = movie.archiveId || (movie.id.startsWith('archive-') ? movie.id.slice(8) : null);
   if (archiveId) loadArchiveItem(archiveId, movie, session, subtitleRequest);
+  if (movie.tmdbId) loadMovieSource(movie, session, subtitleRequest);
 }
 function closePlayer() { playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
 function refreshTracks() {
