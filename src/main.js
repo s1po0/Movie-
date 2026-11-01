@@ -36,7 +36,7 @@ function render() {
             <div class="eyebrow"><span></span> جیهانێک چیرۆک، لە یەک شوێن</div>
             <h1>کاتی ئەوەیە<br><em>چیرۆکێکی نوێ ببینیت.</em></h1>
             <p>فیلم و دراماکانت کۆ بکەرەوە، سەیریان بکە و ژێرنووسەکە بە زمانی دڵخوازت بگۆڕە.</p>
-            <div class="hero-actions"><button class="primary" data-play="archive-his_girl_friday">${icon('play')} دەست بە بینین بکە</button><button class="ghost" data-action="add">${icon('plus')} فیلم زیاد بکە</button></div>
+            <div class="hero-actions"><button class="primary" data-play="cinebloom-155">${icon('play')} سەیرکردنی <span dir="ltr">The Dark Knight</span></button><button class="ghost" data-action="add">${icon('plus')} فیلم زیاد بکە</button></div>
           </div><div class="hero-index"><span>01</span><div></div> YOUR CINEMA, YOUR WAY</div>
         </section>
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
