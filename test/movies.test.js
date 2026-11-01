@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openMovies } from '../src/movies.js';
+import { movies, classicMovies } from '../src/movies.js';
 
-test('free movies have unique identifiers and direct HTTPS movie URLs', () => {
-  assert.ok(openMovies.length >= 4);
-  assert.equal(new Set(openMovies.map(movie => movie.id)).size, openMovies.length);
-  for (const movie of openMovies) {
+test('catalog movies have unique identifiers and direct HTTPS movie links', () => {
+  assert.ok(movies.length >= 12);
+  assert.ok(classicMovies.length >= 8);
+  assert.equal(new Set(movies.map(movie => movie.id)).size, movies.length);
+  for (const movie of movies) {
     assert.equal(new URL(movie.url).protocol, 'https:');
-    assert.match(movie.url, /\.mp4$/i);
-    assert.ok(movie.title && movie.credit);
+    assert.match(new URL(movie.url).pathname, /\.mp4$/i);
+    assert.ok(movie.title && (movie.credit || movie.sourcePage));
   }
 });

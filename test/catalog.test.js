@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { referenceMovies, referenceUrl, searchReferenceMovies } from '../src/catalog.js';
-test('reference titles are searchable and point to a clearly identified source', () => {
-  assert.ok(referenceMovies.length > 0);
-  assert.deepEqual(searchReferenceMovies('  vErItY ').map(m => m.title), ['Verity']);
-  assert.equal(searchReferenceMovies('no such movie').length, 0);
-  assert.equal(new URL(referenceUrl).host, 'kurdtips.uno');
+import { searchMovies } from '../src/catalog.js';
+test('searches playable movies by title, genre, and year', () => {
+  assert.deepEqual(searchMovies('  sInTeL ').map(m => m.title), ['Sintel']);
+  assert.ok(searchMovies('دراما').length > 0);
+  assert.ok(searchMovies('1930').length > 0);
+  assert.equal(searchMovies('no such movie').length, 0);
 });
