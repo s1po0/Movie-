@@ -257,8 +257,9 @@ async function translateForPlayerMenu(text, session, requestId) {
     embeddedMenuToken = token;
     status('وەرگێڕان تەواو بوو؛ دوگمەکە دابگرە تا سۆرانی بێتە لیستی CC.');
     buttons.forEach(button => button.classList.remove('hidden'));
-  } catch {
-    status('وەرگێڕانی Google تەواو نەبوو؛ دووبارە هەوڵ بدە.');
+  } catch (error) {
+    const detail = String(error?.message || 'network error').replace(/[\r\n]/g, ' ').slice(0, 140);
+    status(`وەرگێڕانی Google تەواو نەبوو؛ دووبارە هەوڵ بدە. (${detail})`);
   }
 }
 async function loadEmbeddedSource(movie, session) {

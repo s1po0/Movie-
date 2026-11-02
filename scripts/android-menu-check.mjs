@@ -20,7 +20,8 @@ try {
   if (!await evaluate("Boolean(window.Capacitor?.PluginHeaders?.some(p => p.name === 'MenuSubtitle'))")) throw Error('Native subtitle plugin not registered');
   await evaluate("document.querySelector('[data-play=\"cinebloom-155\"]').click()");
   try {
-    await wait(async function automaticTranslationReady() { return evaluate("!document.querySelector('.embedded-menu-ready')?.classList.contains('hidden')"); }, 210000);
+    const state = await wait(async function automaticTranslationReady() { return evaluate("!document.querySelector('.embedded-menu-ready')?.classList.contains('hidden') ? 'ready' : /تەواو نەبوو|نەدۆزرایەوە/.test(document.querySelector('#embedded-subtitle-status')?.textContent || '') ? 'failed' : ''"); }, 210000);
+    if (state === 'failed') throw Error('Translation failed');
   } catch (error) {
     const status = await evaluate("document.querySelector('#embedded-subtitle-status')?.textContent || 'no status'");
     throw Error(`Automatic translation did not complete: ${status}`);
