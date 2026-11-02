@@ -10,6 +10,7 @@ import { catalogUrl, mergeCatalogPage } from './cinemeta.js';
 import { isDonkeyPage } from './donkey.js';
 import { movieEmbedUrl } from './vidlink-embed.js';
 import { createCatalogCache } from './catalog-cache.js';
+import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
@@ -18,6 +19,7 @@ const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, Arrow
 const getCatalog = createCatalogCache(getJson);
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {}, playerTimer;
+let embeddedSubtitles = null, embeddedSourceRequest = 0;
 let discovery = [], discoveryQuery = '', discoveryGenre = 'Horror', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
@@ -202,16 +204,58 @@ function startEmbeddedPlayer(frame, session) {
     status.textContent = 'ئەگەر پەخشەکە درێژی کێشا، دووبارە هەوڵ بدە یان لە پەڕەیەکی تر بیکەرەوە.';
   }, 20000);
 }
+async function loadEmbeddedSource(movie, session) {
+  const requestId = ++embeddedSourceRequest;
+  const valid = () => session === playerSession && requestId === embeddedSourceRequest && embeddedSubtitles;
+  const status = text => { if (valid()) document.querySelector('#embedded-subtitle-status').textContent = text; };
+  status('گەڕان بۆ ژێرنووسی فیلم...');
+  try {
+    // The provider does not permit browser CORS; Android's native HTTP may work,
+    // but the service can still block requests or not provide a track.
+    if (!Capacitor.isNativePlatform()) throw new Error('Browser CORS');
+    let id = String(movie.tmdbId || '');
+    if (!/^\d{1,12}$/.test(id) && /^tt\d+$/.test(movie.imdbId || '')) {
+      const meta = await getJson(`https://v3-cinemeta.strem.io/meta/movie/${movie.imdbId}.json`);
+      id = String(meta?.meta?.moviedb_id || '');
+    }
+    if (!valid()) return;
+    if (!/^\d{1,12}$/.test(id)) throw new Error('No TMDB ID');
+    const { movieSourceUrl, movieSources } = await import('./vidlink.js');
+    const data = await getJson(movieSourceUrl(id));
+    if (!valid()) return;
+    const tracks = movieSources(data).subtitles;
+    const sorani = tracks.find(s => /sorani|central kurdish|\bckb\b|سۆرانی/i.test(s.label));
+    const track = sorani || tracks.find(s => /english|\beng?\b/i.test(s.label));
+    if (!track || new URL(track.url).hostname !== 'cacdn.hakunaymatata.com') throw new Error('No supported track');
+    const res = await CapacitorHttp.get({ url: track.url, responseType: 'text' });
+    if (!valid()) return;
+    if (res.status < 200 || res.status >= 300 || typeof res.data !== 'string' || res.data.length > 2_000_000) throw new Error('Subtitle unavailable');
+    document.querySelector('#embedded-sorani-file').checked = Boolean(sorani);
+    embeddedSubtitles.setCues(res.data, Boolean(sorani));
+  } catch {
+    status('ژێرنووسی خۆکار بەردەست نییە؛ فایلی SRT یان VTT بار بکە.');
+  }
+}
+function startEmbeddedSubtitles(movie, session) {
+  embeddedSubtitles?.destroy();
+  embeddedSubtitles = createEmbeddedSubtitles({
+    request: async (text, target) => translatedText(await getJson(translationUrl(text, target))),
+    onText: text => { const el = document.querySelector('#embedded-subtitle-text'); if (el && session === playerSession) el.textContent = text; },
+    onStatus: text => { const el = document.querySelector('#embedded-subtitle-status'); if (el && session === playerSession) el.textContent = text; },
+  });
+  loadEmbeddedSource(movie, session);
+}
 function openPlayer(movie) {
   if (!movie) return;
   playerSession++; subtitleRequest++; current = movie; originalCues = null; translations = {};
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
     const url = movieEmbedUrl(movie.tmdbId || movie.imdbId);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><p class="player-hint">ژێرنووس لە ڕێکخستنەکانی پلەیەرەکە هەڵبژێرە؛ ئەگەر پەخش هێواش بوو کوالێتی کەمتر هەڵبژێرە، ئەگەر بەردەست بوو. وەرگێڕانی DIMO لێرە کار ناکات.</p></div>`;
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>ژێرنووسی کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} فایلی SRT / VTT<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label><label class="subtitle-checkbox"><input id="embedded-sorani-file" type="checkbox"> فایلەکە پێشتر بە سۆرانییە</label></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><p class="player-hint">ئەگەر ژێرنووسی خۆکار نەدۆزرایەوە، فایلی ژێرنووسی هاوکات لەگەڵ ئەم فیلمە بار بکە. وەرگێڕان بە Google دەکرێت و دەقی ژێرنووس بۆ Google دەنێردرێت. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی DIMO بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی DIMO نیشان نادات.</p></div></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
+    startEmbeddedSubtitles(movie, session);
     frame.addEventListener('load', () => {
       if (session !== playerSession) return;
       document.querySelector('#embedded-loading')?.classList.add('hidden');
@@ -237,7 +281,7 @@ function openPlayer(movie) {
   const archiveId = movie.archiveId || (movie.id.startsWith('archive-') ? movie.id.slice(8) : null);
   if (archiveId) loadArchiveItem(archiveId, movie, session, subtitleRequest);
 }
-function closePlayer() { clearTimeout(playerTimer); playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
+function closePlayer() { embeddedSourceRequest++; embeddedSubtitles?.destroy(); embeddedSubtitles = null; clearTimeout(playerTimer); playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
 function refreshTracks() {
   const video = document.querySelector('#video'), select = document.querySelector('#track-select'); if (!video || !select) return;
   const selected = select.value; select.innerHTML = '<option value="off">کوژاندنەوە</option>';
@@ -307,9 +351,11 @@ app.addEventListener('click', e => {
     document.querySelector('#more-movies').disabled = false;
     updateGenreButtons(); drawCatalog(); loadDiscovery('', 1);
   }
+  if (action === 'retry-subtitles') embeddedSubtitles?.retry();
+  if (action === 'subtitle-fullscreen') { const wrap = document.querySelector('.embedded-wrap'); if (wrap?.requestFullscreen) wrap.requestFullscreen().catch(() => toast('شاشەی پڕ بەردەست نییە.')); else toast('شاشەی پڕ بەردەست نییە.'); }
   if (action === 'retry-player') {
     const frame = document.querySelector('#player-modal iframe');
-    if (frame) { startEmbeddedPlayer(frame, playerSession); frame.src = frame.src; }
+    if (frame) { embeddedSubtitles?.setTime(0); startEmbeddedPlayer(frame, playerSession); frame.src = frame.src; }
   }
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
   const play = e.target.closest('[data-play]'); if (play) { const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
@@ -335,6 +381,20 @@ app.addEventListener('input', e => {
   discoveryTimer = setTimeout(() => loadDiscovery(query, 1), 400);
 });
 app.addEventListener('change', async e => {
+  if (e.target.id === 'embedded-language') embeddedSubtitles?.setTarget(e.target.value);
+  if (e.target.id === 'embedded-subtitle-file') {
+    const file = e.target.files[0], session = playerSession, requestId = ++embeddedSourceRequest;
+    if (!file) return;
+    try {
+      if (file.size > 2_000_000) throw new Error('فایلەکە زۆر گەورەیە.');
+      const text = await file.text();
+      if (session === playerSession && requestId === embeddedSourceRequest) embeddedSubtitles?.setCues(text, document.querySelector('#embedded-sorani-file').checked);
+    } catch (error) { if (session === playerSession && requestId === embeddedSourceRequest) document.querySelector('#embedded-subtitle-status').textContent = error.message; }
+  }
+  if (e.target.id === 'embedded-sorani-file') {
+    const file = document.querySelector('#embedded-subtitle-file').files[0];
+    if (file && file.size <= 2_000_000) { const session = playerSession, id = ++embeddedSourceRequest; try { const text = await file.text(); if (session === playerSession && id === embeddedSourceRequest) embeddedSubtitles?.setCues(text, e.target.checked); } catch (error) { if (session === playerSession && id === embeddedSourceRequest) document.querySelector('#embedded-subtitle-status').textContent = error.message; } }
+  }
   if (e.target.id === 'subtitle-file') { const file = e.target.files[0], session = playerSession, requestId = ++subtitleRequest; if (!file) return; try { const text = await file.text(); if (session === playerSession && requestId === subtitleRequest) loadSubtitle(text); } catch (error) { if (session === playerSession && requestId === subtitleRequest) document.querySelector('#subtitle-status').textContent = error.message; } }
   if (e.target.id === 'subtitle-source' && e.target.value) loadSubtitleUrl(e.target.value);
   if (e.target.id === 'track-select') { const video = document.querySelector('#video'); Array.from(video.textTracks).forEach((t, i) => { t.mode = String(i) === e.target.value ? 'showing' : 'disabled'; }); }
@@ -343,6 +403,9 @@ app.addEventListener('change', async e => {
 window.addEventListener('message', event => {
   const frame = document.querySelector('#player-modal iframe');
   if (!frame || event.origin !== 'https://vidlink.pro' || event.source !== frame.contentWindow) return;
+  if (event.data?.type === 'PLAYER_EVENT' && ['play', 'pause', 'seeked', 'ended', 'timeupdate'].includes(event.data?.data?.event)) {
+    embeddedSubtitles?.setTime(event.data.data.currentTime);
+  }
   if (event.data?.type === 'PLAYER_EVENT' && ['play', 'timeupdate'].includes(event.data?.data?.event)) {
     clearTimeout(playerTimer);
     document.querySelector('#embedded-loading')?.classList.add('hidden');
