@@ -2,13 +2,17 @@ const BASE = 'https://v3-cinemeta.strem.io/catalog/movie/top';
 const imdbId = value => typeof value === 'string' && /^tt\d{5,12}$/.test(value);
 
 // Cinemeta provides metadata, not streams. Search results may not have a playable source.
-export function catalogUrl(query = '', page = 1) {
+export function catalogUrl(query = '', page = 1, genre = '') {
   const term = Array.from(String(query).trim()).slice(0, 120)
     .map(char => char.length === 1 && /[\uD800-\uDFFF]/.test(char) ? '\uFFFD' : char).join('');
   if (!Number.isInteger(page) || page < 1 || page > 10000) throw new Error('Invalid catalog page');
+  if (genre !== '' && genre !== 'Horror') throw new Error('Invalid catalog genre');
   if (term) return `${BASE}/search=${encodeURIComponent(term)}.json`;
   // Cinemeta's popular catalog advances in 50-item slots; some slots contain fewer entries.
-  return page === 1 ? `${BASE}.json` : `${BASE}/skip=${(page - 1) * 50}.json`;
+  const params = [];
+  if (genre) params.push(`genre=${genre}`);
+  if (page > 1) params.push(`skip=${(page - 1) * 50}`);
+  return `${BASE}${params.length ? `/${params.join('&')}` : ''}.json`;
 }
 
 export function mergeCatalogPage(existing, data, query = '', page = 1) {

@@ -8,7 +8,7 @@ import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { metadataUrl, archiveFiles } from './archive.js';
 import { catalogUrl, mergeCatalogPage } from './cinemeta.js';
-import { isDonkeyPage, donkeyHome } from './donkey.js';
+import { isDonkeyPage } from './donkey.js';
 import { movieEmbedUrl } from './vidlink.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
@@ -16,7 +16,7 @@ const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const app = document.querySelector('#app');
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {};
-let discovery = [], discoveryQuery = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
+let discovery = [], discoveryQuery = '', discoveryGenre = 'Horror', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
 function saveLibrary() { localStorage.setItem('dimo-library', JSON.stringify(library)); }
@@ -43,8 +43,9 @@ function render() {
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلم و درامای زیاتر</button><p class="catalog-notice">بۆ بینینی فیلمی زیاتر بچۆ خوارەوە. بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە.</p>
-          <div id="catalog-cards" class="catalog-cards">${catalogCards(searchMovies('').filter(movie => !movie.credit))}</div>
+          <div class="catalog-filters" role="group" aria-label="جۆری فیلم"><button type="button" data-genre="Horror" aria-pressed="${discoveryGenre === 'Horror'}">فیلمە ترسناکەکان</button><button type="button" data-genre="all" aria-pressed="${discoveryGenre === ''}">هەموو فیلمەکان</button></div>
+          <p class="catalog-notice">بۆ بینینی فیلمی زیاتر بچۆ خوارەوە. بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە.</p>
+          <div id="catalog-cards" class="catalog-cards">${catalogCards(localCatalogMovies(''))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
         <section class="library" id="library">
@@ -100,8 +101,14 @@ async function getJson(url) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
+function localCatalogMovies(query) {
+  return searchMovies(query).filter(movie => !movie.credit && (discoveryGenre !== 'Horror' || movie.type?.includes('ترسناک')));
+}
+function updateGenreButtons() {
+  document.querySelectorAll('[data-genre]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.genre === (discoveryGenre || 'all'))));
+}
 function drawCatalog() {
-  const local = searchMovies(discoveryQuery).filter(movie => !movie.credit);
+  const local = localCatalogMovies(discoveryQuery);
   const ids = new Set(local.map(movie => movie.imdbId).filter(Boolean));
   const items = [...local, ...discovery.filter(movie => !ids.has(movie.imdbId))];
   document.querySelector('#catalog-cards').innerHTML = catalogCards(items);
@@ -116,7 +123,7 @@ async function loadDiscovery(query, page) {
   const button = document.querySelector('#more-movies'); button.disabled = true;
   status.textContent = 'فیلمەکان بار دەکرێن...';
   try {
-    const result = mergeCatalogPage(discovery, await getJson(catalogUrl(query, page)), query, page);
+    const result = mergeCatalogPage(discovery, await getJson(catalogUrl(query, page, discoveryGenre)), query, page);
     if (seq !== discoverySeq) return;
     discovery = result.movies; discoveryMore = result.hasMore; discoveryAuto = true;
     discoveryPage = page; button.textContent = 'فیلمی زیاتر'; drawCatalog();
@@ -256,7 +263,15 @@ async function translateCues() {
 }
 app.addEventListener('click', e => {
   const action = e.target.closest('[data-action]')?.dataset.action;
-  if (action === 'donkey') openDonkey(donkeyHome);
+  const genre = e.target.closest('[data-genre]');
+  if (genre) {
+    discoverySeq++; clearTimeout(discoveryTimer);
+    discoveryGenre = genre.dataset.genre === 'Horror' ? 'Horror' : '';
+    discovery = []; discoveryPage = 0; discoveryMore = false; discoveryLoading = false; discoveryAuto = true; discoveryQuery = '';
+    document.querySelector('#catalog-search').value = '';
+    document.querySelector('#more-movies').disabled = false;
+    updateGenreButtons(); drawCatalog(); loadDiscovery('', 1);
+  }
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
   const play = e.target.closest('[data-play]'); if (play) { const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
   const del = e.target.closest('[data-delete]'); if (del && confirm('ئەم فیلمە لە کتێبخانە بسڕدرێتەوە؟')) { library = library.filter(m => m.id !== del.dataset.delete); saveLibrary(); render(); toast('فیلمەکە سڕایەوە.'); }
@@ -273,6 +288,8 @@ app.addEventListener('input', e => {
   if (e.target.id !== 'catalog-search') return;
   const query = e.target.value;
   discoverySeq++; clearTimeout(discoveryTimer); discovery = []; discoveryPage = 0; discoveryMore = false; discoveryLoading = false; discoveryAuto = true; discoveryQuery = query;
+  // Cinemeta's text search is global; do not imply it is filtered by genre.
+  if (query.trim()) { discoveryGenre = ''; updateGenreButtons(); }
   document.querySelector('#more-movies').disabled = false;
   drawCatalog();
   document.querySelector('#discovery-status').textContent = 'گەڕان...';
