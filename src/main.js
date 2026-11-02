@@ -411,5 +411,5 @@ window.addEventListener('message', event => {
     document.querySelector('#embedded-loading')?.classList.add('hidden');
   }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!document.querySelector('#modal').classList.contains('hidden')) closeModal(); else if (current) closePlayer(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (document.fullscreenElement) return; if (!document.querySelector('#modal').classList.contains('hidden')) closeModal(); else if (current) closePlayer(); } });
 render();
