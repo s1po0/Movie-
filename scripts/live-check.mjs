@@ -4,6 +4,10 @@ const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome'
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 try {
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  try {
+    await page.locator('#catalog-cards [data-play^="cinemeta-"]').first().waitFor({ timeout: 15000 });
+    console.log('::notice title=Popular movies::Live popular catalogue loaded');
+  } catch { console.log('::warning title=Popular movies::Live popular catalogue did not load'); }
   await page.locator('#catalog-search').fill('the matrix');
   await page.locator('[data-play="cinemeta-tt0133093"]').waitFor({ timeout: 30000 });
   console.log('::notice title=Movie search::Live Cinemeta search returned The Matrix');
@@ -17,6 +21,8 @@ try {
   console.log('::notice title=Embedded player::Provider loaded without the sandbox warning');
   const box = await page.locator('#player-modal iframe').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const playError = await frame.locator('video').evaluate(v => v.play().then(() => null).catch(error => error.message));
+  if (playError) throw new Error(`Video play failed: ${playError}`);
   await page.waitForTimeout(20000);
   const media = await frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, readyState: v.readyState, error: v.error?.code || null }));
   if (media.currentTime <= 0) throw new Error(`No playback progress: ${JSON.stringify(media)}`);
