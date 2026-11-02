@@ -1,5 +1,3 @@
-import { withSubtitleTrack, subtitleTrackUrl } from '../src/menu-subtitles.js';
-
 let socket;
 try {
   const targets = await (await fetch('http://127.0.0.1:9222/json')).json();
@@ -20,12 +18,19 @@ try {
   await send('Page.enable'); await send('Runtime.enable');
   await wait(async function appReady() { return evaluate("Boolean(document.querySelector('[data-play=\"cinebloom-155\"]'))"); }, 30000);
   if (!await evaluate("Boolean(window.Capacitor?.PluginHeaders?.some(p => p.name === 'MenuSubtitle'))")) throw Error('Native subtitle plugin not registered');
-  const token='0123456789abcdef0123456789abcdef';
-  const text='WEBVTT\n\n00:00:00.000 --> 00:10:00.000\nسڵاو تاقیکردنەوە\n';
   await evaluate("document.querySelector('[data-play=\"cinebloom-155\"]').click()");
-  await evaluate(`window.Capacitor.nativePromise('MenuSubtitle','setTrack', ${JSON.stringify({ token, text })})`);
-  const src=withSubtitleTrack('https://vidlink.pro/movie/155',token);
-  await evaluate(`document.querySelector('#player-modal iframe').src=${JSON.stringify(src)}`);
+  try {
+    await wait(async function automaticTranslationReady() { return evaluate("!document.querySelector('.embedded-menu-ready')?.classList.contains('hidden')"); }, 210000);
+  } catch (error) {
+    const status = await evaluate("document.querySelector('#embedded-subtitle-status')?.textContent || 'no status'");
+    throw Error(`Automatic translation did not complete: ${status}`);
+  }
+  const status = await evaluate("document.querySelector('#embedded-subtitle-status').textContent");
+  console.log(`::notice title=Android Google translation::${status}`);
+  await evaluate("document.querySelector('.embedded-menu-ready').click()");
+  const src = await evaluate("document.querySelector('#player-modal iframe').src");
+  const url = new URL(src), trackUrl = url.searchParams.get('sub_file');
+  if (!trackUrl || url.searchParams.get('sub_label') !== 'کوردی سۆرانی') throw Error('Sorani player option missing');
   const contextId = await wait(async function playerContext() {
     const { frameTree } = await send('Page.getFrameTree');
     const find = t => t.frame?.url?.startsWith('https://vidlink.pro/movie/') ? t.frame.id : (t.childFrames || []).map(find).find(Boolean);
@@ -33,10 +38,10 @@ try {
     const world = await send('Page.createIsolatedWorld', { frameId, worldName: 'dimo-test' });
     return await evaluate("document.readyState === 'complete'", world.executionContextId) ? world.executionContextId : null;
   });
-  const fetched = await evaluate(`fetch(${JSON.stringify(subtitleTrackUrl(token))}).then(async r => ({status:r.status,text:await r.text()}))`, contextId);
-  if (fetched.status !== 200 || fetched.text !== text) throw Error(`Android interception failed: HTTP ${fetched.status}`);
+  const fetched = await evaluate(`fetch(${JSON.stringify(trackUrl)}).then(async r => ({status:r.status,text:await r.text()}))`, contextId);
+  if (fetched.status !== 200 || !fetched.text.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(fetched.text)) throw Error(`Android translated subtitle interception failed: HTTP ${fetched.status}`);
   await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('button')).some(b => /Captions.*کوردی سۆرانی/.test(b.innerText))", contextId); }, 60000);
-  console.log('::notice title=Android subtitle menu::Android WebView served the in-memory VTT and the player selected the Sorani menu option');
+  console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option');
 } catch(error) {
   console.log(`::error title=Android subtitle menu::${String(error.message).split('\n')[0]}`); process.exitCode=1;
 } finally { socket?.close(); }
