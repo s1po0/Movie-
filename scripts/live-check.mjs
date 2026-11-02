@@ -15,9 +15,8 @@ try {
   const body = await frame.locator('body').innerText();
   if (/please disable sandbox/i.test(body)) throw new Error('Provider still reports sandbox restriction');
   console.log('::notice title=Embedded player::Provider loaded without the sandbox warning');
-  const button = frame.getByRole('button', { name: /^play$/i }).first();
-  if (await button.count()) await button.click({ timeout: 5000 });
-  else await frame.locator('video').click({ timeout: 5000 });
+  const box = await page.locator('#player-modal iframe').boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(20000);
   const media = await frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, readyState: v.readyState, error: v.error?.code || null }));
   if (media.currentTime <= 0) throw new Error(`No playback progress: ${JSON.stringify(media)}`);
