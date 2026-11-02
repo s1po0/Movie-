@@ -1,8 +1,9 @@
 import { chromium } from 'playwright-core';
 import { withSubtitleTrack, subtitleTrackUrl } from '../src/menu-subtitles.js';
 
-const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+let browser;
 try {
+  browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
   const page = browser.contexts()[0].pages()[0];
   await page.locator('[data-play="cinebloom-155"]').first().waitFor({timeout:30000});
   const available = await page.evaluate(() => Boolean(window.Capacitor?.PluginHeaders?.some(p => p.name === 'MenuSubtitle')));
@@ -25,4 +26,4 @@ try {
   console.log('::notice title=Android subtitle menu::Android WebView served the in-memory VTT and the player selected the Sorani menu option');
 } catch(error) {
   console.log(`::error title=Android subtitle menu::${String(error.message).split('\n')[0]}`); process.exitCode=1;
-} finally { await browser.close(); }
+} finally { await browser?.close(); }

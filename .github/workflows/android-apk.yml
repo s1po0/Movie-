@@ -86,20 +86,4 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
-          script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n app.dimo.movies/.MainActivity
-            sleep 15
-            pid=$(adb shell pidof app.dimo.movies | tr -d '\r')
-            adb forward tcp:9222 localabstract:webview_devtools_remote_$pid
-            node scripts/android-menu-check.mjs
-  android-menu-diagnostics:
-    if: always() && contains(github.event.head_commit.message, '[android-menu-check]')
-    needs: android-menu-check
-    runs-on: ubuntu-24.04
-    steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          id=$(gh api repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs --jq '.jobs[] | select(.name == "android-menu-check") | .id')
-          gh run view $GITHUB_RUN_ID --repo "$GITHUB_REPOSITORY" --job "$id" --log | tail -80 | while IFS= read -r line; do echo "::notice title=Android test log::$line"; done
+          script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-menu-check.mjs
