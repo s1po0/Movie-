@@ -239,15 +239,31 @@ async function providerEnglishSubtitle(movie, valid) {
   if (typeof text !== 'string' || text.length > 2_000_000 || parseSubtitles(text).length < 10) throw new Error('Invalid player subtitle');
   return text;
 }
+async function googleTranslateForMenu(text, target) {
+  const url = translationUrl(text, target);
+  // WebView requests use a browser User-Agent. Google's unofficial endpoint
+  // often rate-limits Android's default Java HTTP client more aggressively.
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (response.status === 429) throw new Error('HTTP 429');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return translatedText(await response.json());
+  } catch (error) {
+    if (error.message === 'HTTP 429') throw error;
+    return translatedText(await subtitleHttp(url, 'json'));
+  } finally { clearTimeout(timer); }
+}
 async function translateForPlayerMenu(text, session, requestId) {
   const valid = () => session === playerSession && requestId === embeddedSourceRequest && embeddedSubtitles;
   const status = message => { if (valid()) document.querySelector('#embedded-subtitle-status').textContent = message; };
   const buttons = document.querySelectorAll('[data-action="enable-menu-subtitle"]');
   buttons.forEach(button => button.classList.add('hidden'));
+  let progress = '';
   try {
     status('Google ژێرنووسەکە بۆ کوردی سۆرانی وەردەگێڕێت...');
-    const vtt = await translateMenuSubtitles(text, async (line, target) => translatedText(await subtitleHttp(translationUrl(line, target), 'json')), {
-      isCurrent: valid, onProgress: (done, total) => status(`وەرگێڕانی Google... ${done} / ${total}`),
+    const vtt = await translateMenuSubtitles(text, googleTranslateForMenu, {
+      isCurrent: valid, onProgress: (done, total) => { progress = `${done}/${total}`; status(`وەرگێڕانی Google... ${done} / ${total}`); },
     });
     if (!valid()) return;
     const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
@@ -258,8 +274,8 @@ async function translateForPlayerMenu(text, session, requestId) {
     status('وەرگێڕان تەواو بوو؛ دوگمەکە دابگرە تا سۆرانی بێتە لیستی CC.');
     buttons.forEach(button => button.classList.remove('hidden'));
   } catch (error) {
-    const detail = String(error?.message || 'network error').replace(/[\r\n]/g, ' ').slice(0, 140);
-    status(`وەرگێڕانی Google تەواو نەبوو؛ دووبارە هەوڵ بدە. (${detail})`);
+    const detail = /^HTTP \d{3}$/.test(error?.message || '') ? error.message : 'network error';
+    status(`وەرگێڕانی Google تەواو نەبوو؛ دووبارە هەوڵ بدە. (${detail}${progress ? ` · ${progress}` : ''})`);
   }
 }
 async function loadEmbeddedSource(movie, session) {

@@ -13,9 +13,9 @@ export async function translateMenuSubtitles(text, request, { isCurrent = () => 
   const check = () => { if (!isCurrent() || failure) throw new Error('Translation cancelled'); };
   const retryingRequest = async line => {
     check();
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       try { const result = await request(line, 'ckb'); check(); return result; }
-      catch (error) { check(); if (attempt) throw error; await new Promise(resolve => setTimeout(resolve, 500)); }
+      catch (error) { check(); if (attempt === 3) throw error; await new Promise(resolve => setTimeout(resolve, [800, 2500, 5000][attempt])); }
     }
   };
   async function worker() {
@@ -26,10 +26,11 @@ export async function translateMenuSubtitles(text, request, { isCurrent = () => 
         if (index >= groups.length) return;
         results[index] = await translateGroup(groups[index], retryingRequest);
         check(); onProgress(++completed, groups.length);
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     } catch (error) { failure ||= error; }
   }
-  await Promise.all([worker(), worker()]);
+  await worker();
   if (failure) throw failure;
   check();
   return toVtt(results.flat());
