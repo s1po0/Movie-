@@ -37,6 +37,10 @@ try {
     try {
       await page.waitForFunction(() => /[\u0600-\u06ff]/.test(document.querySelector('#embedded-subtitle-text')?.textContent || ''), null, { timeout: 30000 });
       console.log('::notice title=Automatic Sorani subtitle::Automatically found an English subtitle and displayed Google translation without uploading a file');
+      await page.locator('.embedded-fullscreen-button').click();
+      if (await page.locator('#embedded-subtitle-text').isVisible() && /[\u0600-\u06ff]/.test(await page.locator('#embedded-subtitle-text').innerText())) console.log('::notice title=Fullscreen Sorani subtitle::Translated subtitle remained visible in DIMO fullscreen');
+      else console.log('::warning title=Fullscreen Sorani subtitle::Subtitle was not visible in DIMO fullscreen');
+      await page.locator('.dimo-fullscreen-exit').click();
     } catch {
       console.log(`::warning title=Automatic Sorani subtitle::No translated overlay: ${await page.locator('#embedded-subtitle-status').innerText()}`);
     }

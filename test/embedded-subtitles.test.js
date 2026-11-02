@@ -49,3 +49,20 @@ test('stops on translation failure until retry and rejects malformed subtitle fi
   player.retry(); await flush(); assert.equal(shown, 'Hello!');
   player.destroy();
 });
+
+test('prepares the next subtitle even during a long silent introduction', async () => {
+  let calls = [], shown = '';
+  const player = createEmbeddedSubtitles({ onText: value => shown = value, onStatus() {}, request: async (text, lang) => { calls.push([text, lang]); return text.split('\n').map(() => 'سڵاو').join('\n'); } });
+  player.setCues('1\n00:03:00,000 --> 00:03:05,000\nHello\n\n2\n00:10:00,000 --> 00:10:05,000\nLater');
+  await flush(); assert.equal(calls.length, 1); assert.equal(calls[0][1], 'ckb');
+  player.setTime(181); assert.equal(shown, 'سڵاو');
+  player.destroy();
+});
+
+test('subtitle timing adjustment changes display without changing the movie position', async () => {
+  let shown = '';
+  const player = createEmbeddedSubtitles({ onText: value => shown = value, onStatus() {}, request: async text => text });
+  player.setCues(subtitles); await flush(); player.setTime(3.5); assert.equal(shown, '');
+  player.setOffset(2); assert.equal(shown, 'Hello!');
+  player.setOffset(0); assert.equal(shown, ''); player.destroy();
+});
