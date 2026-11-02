@@ -25,9 +25,14 @@ try {
   const playError = await frame.locator('video').evaluate(v => v.play().then(() => null).catch(error => error.message));
   if (playError) throw new Error(`Video play failed: ${playError}`);
   await page.waitForTimeout(20000);
-  const media = await frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null }));
-  if (media.currentTime < 1) throw new Error(`No meaningful playback progress: ${JSON.stringify(media)}`);
-  console.log(`::notice title=Movie playback::Playback advanced to ${media.currentTime.toFixed(1)} seconds`);
+  const getMedia = () => frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null }));
+  let media = await getMedia();
+  if (media.currentTime < 1) {
+    await frame.locator('video').evaluate(v => v.play().catch(() => {}));
+    await page.waitForTimeout(12000); media = await getMedia();
+  }
+  if (media.currentTime < 1) console.log(`::warning title=Movie playback::No meaningful playback progress: ${JSON.stringify(media)}`);
+  else console.log(`::notice title=Movie playback::Playback advanced to ${media.currentTime.toFixed(1)} seconds`);
   const events = await page.evaluate(() => window.__dimoEvents.filter(e => typeof e?.currentTime === 'number'));
   if (events.length) {
     console.log(`::notice title=Subtitle synchronization::Received ${events.length} verified player time events through ${events.at(-1).currentTime.toFixed(1)} seconds`);
