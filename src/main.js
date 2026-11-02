@@ -7,7 +7,7 @@ import { translationGroups, translationUrl, translatedText, translateGroup } fro
 import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { metadataUrl, archiveFiles } from './archive.js';
-import { catalogUrl, catalogResults } from './cinemeta.js';
+import { catalogUrl, mergeCatalogPage } from './cinemeta.js';
 import { isDonkeyPage, donkeyHome } from './donkey.js';
 import { movieEmbedUrl } from './vidlink.js';
 
@@ -16,7 +16,7 @@ const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const app = document.querySelector('#app');
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {};
-let discovery = [], discoveryQuery = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false;
+let discovery = [], discoveryQuery = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
 function saveLibrary() { localStorage.setItem('dimo-library', JSON.stringify(library)); }
@@ -43,7 +43,7 @@ function render() {
         <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلم و درامای زیاتر</button><p class="catalog-notice">بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە؛ هەموو فیلمێک بەردەست نییە.</p>
+          <button class="ghost donkey-link" data-action="donkey">${icon('clapperboard')} فیلم و درامای زیاتر</button><p class="catalog-notice">بۆ بینینی فیلمی زیاتر بچۆ خوارەوە. بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە.</p>
           <div id="catalog-cards" class="catalog-cards">${catalogCards(searchMovies('').filter(movie => !movie.credit))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
@@ -59,6 +59,16 @@ function render() {
     <div class="overlay hidden player-overlay" id="player-modal" role="dialog" aria-modal="true"></div>
     <div class="toast hidden" role="status"></div>`;
   paintIcons();
+  discoveryObserver?.disconnect();
+  discoveryMore = false; discoveryLoading = false; discoveryAuto = true;
+  if ('IntersectionObserver' in window) {
+    discoveryObserver = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting) && discoveryAuto && discoveryMore && !discoveryLoading && !discoveryQuery.trim()) {
+        loadDiscovery(discoveryQuery, discoveryPage + 1);
+      }
+    }, { rootMargin: '500px' });
+    discoveryObserver.observe(document.querySelector('#more-movies'));
+  }
   loadDiscovery('', 1);
 }
 function catalogCards(items) {
@@ -100,21 +110,24 @@ function drawCatalog() {
   paintIcons();
 }
 async function loadDiscovery(query, page) {
-  const seq = ++discoverySeq; discoveryQuery = query;
-  const status = document.querySelector('#discovery-status'); if (!status) return;
+  if (discoveryLoading) return;
+  const seq = ++discoverySeq; discoveryQuery = query; discoveryLoading = true;
+  const status = document.querySelector('#discovery-status'); if (!status) { discoveryLoading = false; return; }
   const button = document.querySelector('#more-movies'); button.disabled = true;
   status.textContent = 'فیلمەکان بار دەکرێن...';
   try {
-    const items = catalogResults(await getJson(catalogUrl(query, page)));
+    const result = mergeCatalogPage(discovery, await getJson(catalogUrl(query, page)), query, page);
     if (seq !== discoverySeq) return;
-    if (page === 1) discovery = items;
-    else { const known = new Set(discovery.map(movie => movie.imdbId)); discovery.push(...items.filter(movie => !known.has(movie.imdbId))); }
-    discoveryMore = !query.trim() && items.length >= 100;
-    discoveryPage = page; drawCatalog();
-    status.textContent = items.length ? 'زانیاری فیلمەکان لە Cinemeta ـە؛ بوونی ناوێک دڵنیایی پەخش نییە.' : 'ئەنجامی زیاتری بەردەست نییە.';
+    discovery = result.movies; discoveryMore = result.hasMore; discoveryAuto = true;
+    discoveryPage = page; button.textContent = 'فیلمی زیاتر'; drawCatalog();
+    status.textContent = discovery.length ? `${discovery.length.toLocaleString()} فیلم بارکرا؛ بەردەستبوونی پەخش بە سەرچاوەکە پەیوەستە.` : 'ئەنجامی زیاتری بەردەست نییە.';
   } catch {
-    if (seq === discoverySeq) { discoveryMore = false; status.textContent = 'گەڕانی فیلم بار نەبوو؛ ئینتەرنێت بپشکنە.'; drawCatalog(); }
-  } finally { if (seq === discoverySeq) button.disabled = false; }
+    if (seq === discoverySeq) {
+      discoveryMore = page > 1 && discovery.length > 0; discoveryAuto = false;
+      button.textContent = 'دووبارە هەوڵ بدە';
+      status.textContent = 'فیلمەکان بار نەبوون؛ ئینتەرنێت بپشکنە و دووبارە هەوڵ بدە.'; drawCatalog();
+    }
+  } finally { if (seq === discoverySeq) { discoveryLoading = false; button.disabled = false; } }
 }
 function addSubtitleSources(sources) {
   const label = document.querySelector('#subtitle-source-label'), select = document.querySelector('#subtitle-source');
@@ -259,7 +272,8 @@ app.addEventListener('submit', e => {
 app.addEventListener('input', e => {
   if (e.target.id !== 'catalog-search') return;
   const query = e.target.value;
-  discoverySeq++; clearTimeout(discoveryTimer); discovery = []; discoveryPage = 0; discoveryMore = false; discoveryQuery = query;
+  discoverySeq++; clearTimeout(discoveryTimer); discovery = []; discoveryPage = 0; discoveryMore = false; discoveryLoading = false; discoveryAuto = true; discoveryQuery = query;
+  document.querySelector('#more-movies').disabled = false;
   drawCatalog();
   document.querySelector('#discovery-status').textContent = 'گەڕان...';
   discoveryTimer = setTimeout(() => loadDiscovery(query, 1), 400);

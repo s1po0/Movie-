@@ -10,6 +10,17 @@ export function catalogUrl(query = '', page = 1) {
   return page === 1 ? `${BASE}.json` : `${BASE}/skip=${(page - 1) * 100}.json`;
 }
 
+export function mergeCatalogPage(existing, data, query = '', page = 1) {
+  const items = catalogResults(data);
+  const known = new Set((page === 1 ? [] : existing).map(movie => movie.imdbId));
+  const added = items.filter(movie => !known.has(movie.imdbId));
+  return {
+    movies: page === 1 ? added : [...existing, ...added],
+    // A malformed or duplicate entry must not hide the next page of a full response.
+    hasMore: !String(query).trim() && data.metas.length >= 100 && added.length > 0,
+  };
+}
+
 export function catalogResults(data) {
   if (!Array.isArray(data?.metas)) throw new Error('Invalid movie catalog response');
   const seen = new Set();
