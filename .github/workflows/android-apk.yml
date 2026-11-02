@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   debug-apk:
@@ -37,3 +37,12 @@ jobs:
           name: dimo-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Export APK for this build
+        if: contains(github.event.head_commit.message, '[apk-export]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -c 'import base64,json,pathlib; p=pathlib.Path("android/app/build/outputs/apk/debug/app-debug.apk"); json.dump({"content":base64.b64encode(p.read_bytes()).decode(),"encoding":"base64"},open("/tmp/apk-blob.json","w"))'
+          blob=$(gh api "repos/$GITHUB_REPOSITORY/git/blobs" --method POST --input /tmp/apk-blob.json --jq .sha)
+          echo "::notice title=APK blob::$blob"
+          echo "::notice title=APK sha256::$(sha256sum android/app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)"
