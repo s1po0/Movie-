@@ -1,3 +1,5 @@
+import { translationUrl } from '../src/translate.js';
+
 let socket;
 try {
   const targets = await (await fetch('http://127.0.0.1:9222/json')).json();
@@ -18,6 +20,12 @@ try {
   await send('Page.enable'); await send('Runtime.enable');
   await wait(async function appReady() { return evaluate("Boolean(document.querySelector('[data-play=\"cinebloom-155\"]'))"); }, 30000);
   if (!await evaluate("Boolean(window.Capacitor?.PluginHeaders?.some(p => p.name === 'MenuSubtitle'))")) throw Error('Native subtitle plugin not registered');
+  const probeUrl = translationUrl('Hello, how are you?', 'ckb');
+  const hostStatus = await fetch(probeUrl).then(r => r.status).catch(() => 'error');
+  const webStatus = await evaluate(`fetch(${JSON.stringify(probeUrl)}).then(r => r.status).catch(e => e.message)`);
+  const nativeStatus = await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','get',${JSON.stringify({url:probeUrl,responseType:'json'})}).then(r=>r.status).catch(e=>e.message)`);
+  const nodeAgentStatus = await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','get',${JSON.stringify({url:probeUrl,responseType:'json',headers:{'User-Agent':'node'}})}).then(r=>r.status).catch(e=>e.message)`);
+  console.log(`::notice title=Google endpoint diagnostic::Runner=${hostStatus}; WebView=${webStatus}; Android=${nativeStatus}; Android node-agent=${nodeAgentStatus}`);
   await evaluate("document.querySelector('[data-play=\"cinebloom-155\"]').click()");
   try {
     const state = await wait(async function automaticTranslationReady() { return evaluate("!document.querySelector('.embedded-menu-ready')?.classList.contains('hidden') ? 'ready' : /تەواو نەبوو|نەدۆزرایەوە/.test(document.querySelector('#embedded-subtitle-status')?.textContent || '') ? 'failed' : ''"); }, 210000);
