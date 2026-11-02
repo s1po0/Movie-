@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   debug-apk:
@@ -43,17 +43,6 @@ jobs:
           npm install --no-save --no-package-lock playwright-core
           ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/dimo-preview.log 2>&1 &
           node scripts/live-check.mjs
-      - name: Verify horror catalog
-        if: contains(github.event.head_commit.message, '[publish-horror]')
-        run: node scripts/catalog-live-check.mjs --horror
-      - name: Publish debug APK
-        if: contains(github.event.head_commit.message, '[publish-horror]')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/DIMO-debug.apk
-          gh release upload dimo-debug-v5 /tmp/DIMO-debug.apk --clobber
-          gh release edit dimo-debug-v5 --draft=false
   catalog-check:
     if: contains(github.event.head_commit.message, '[catalog-check]')
     runs-on: ubuntu-24.04
