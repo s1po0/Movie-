@@ -13,7 +13,6 @@ try {
   console.log('::notice title=Movie search::Live Cinemeta search returned The Matrix');
   await page.evaluate(() => { window.__dimoEvents = []; window.addEventListener('message', e => { const f = document.querySelector('#player-modal iframe'); if (f && e.origin === 'https://vidlink.pro' && e.source === f.contentWindow && e.data?.type === 'PLAYER_EVENT') window.__dimoEvents.push(e.data.data); }); });
   await page.locator('[data-play="cinebloom-155"]').first().click();
-  await page.locator('#embedded-subtitle-file').setInputFiles({ name: 'test.srt', mimeType: 'text/plain', buffer: Buffer.from('1\n00:00:00,000 --> 00:01:00,000\nHello, how are you?\n') });
   const player = page.frameLocator('#player-modal iframe');
   await player.locator('body').waitFor({ timeout: 30000 });
   await player.locator('video').waitFor({ timeout: 30000 });
@@ -32,9 +31,15 @@ try {
   const events = await page.evaluate(() => window.__dimoEvents.filter(e => typeof e?.currentTime === 'number'));
   if (events.length) {
     console.log(`::notice title=Subtitle synchronization::Received ${events.length} verified player time events through ${events.at(-1).currentTime.toFixed(1)} seconds`);
-    const text = await page.locator('#embedded-subtitle-text').innerText();
-    if (text && /[\u0600-\u06ff]/.test(text)) console.log('::notice title=Sorani subtitle::Live Google translation displayed over the playing video');
-    else console.log(`::warning title=Sorani subtitle::No translated overlay: ${await page.locator('#embedded-subtitle-status').innerText()}`);
+    // The first English subtitle for this film is at about 100 seconds. Seek there
+    // to check automatic lookup and Google translation, without uploading a file.
+    await frame.locator('video').evaluate(v => { v.currentTime = 100.5; v.pause(); });
+    try {
+      await page.waitForFunction(() => /[\u0600-\u06ff]/.test(document.querySelector('#embedded-subtitle-text')?.textContent || ''), null, { timeout: 30000 });
+      console.log('::notice title=Automatic Sorani subtitle::Automatically found an English subtitle and displayed Google translation without uploading a file');
+    } catch {
+      console.log(`::warning title=Automatic Sorani subtitle::No translated overlay: ${await page.locator('#embedded-subtitle-status').innerText()}`);
+    }
   }
   else console.log('::warning title=Subtitle synchronization::No verified player time events received');
 } catch (error) {
