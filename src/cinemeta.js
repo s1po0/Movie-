@@ -7,7 +7,8 @@ export function catalogUrl(query = '', page = 1) {
     .map(char => char.length === 1 && /[\uD800-\uDFFF]/.test(char) ? '\uFFFD' : char).join('');
   if (!Number.isInteger(page) || page < 1 || page > 10000) throw new Error('Invalid catalog page');
   if (term) return `${BASE}/search=${encodeURIComponent(term)}.json`;
-  return page === 1 ? `${BASE}.json` : `${BASE}/skip=${(page - 1) * 100}.json`;
+  // Cinemeta's popular catalog advances in 50-item slots; some slots contain fewer entries.
+  return page === 1 ? `${BASE}.json` : `${BASE}/skip=${(page - 1) * 50}.json`;
 }
 
 export function mergeCatalogPage(existing, data, query = '', page = 1) {
@@ -16,8 +17,8 @@ export function mergeCatalogPage(existing, data, query = '', page = 1) {
   const added = items.filter(movie => !known.has(movie.imdbId));
   return {
     movies: page === 1 ? added : [...existing, ...added],
-    // A malformed or duplicate entry must not hide the next page of a full response.
-    hasMore: !String(query).trim() && data.metas.length >= 100 && added.length > 0,
+    // Cinemeta can return fewer than 50 items even when later pages exist.
+    hasMore: !String(query).trim() && data.metas.length > 0 && added.length > 0,
   };
 }
 
