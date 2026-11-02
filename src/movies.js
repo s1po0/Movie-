@@ -64,6 +64,6 @@ export const classicMovies = [
 // This title is resolved on demand; signed video and subtitle URLs expire.
 export const cinebloomMovies = [{
   id: 'cinebloom-155', title: 'The Dark Knight', year: '2008', type: 'ئەکشن · دراما',
-  poster: 'https://image.tmdb.org/t/p/w342/qJ2tW6WMUDux911r6m7haRef0WH.jpg', tmdbId: '155',
+  poster: 'https://image.tmdb.org/t/p/w342/qJ2tW6WMUDux911r6m7haRef0WH.jpg', tmdbId: '155', imdbId: 'tt0468569',
 }];
 export const movies = [...cinebloomMovies, ...classicMovies, ...openMovies];

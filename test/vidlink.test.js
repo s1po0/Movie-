@@ -4,6 +4,7 @@ import { movieEmbedUrl, movieSourceUrl, movieSources } from '../src/vidlink.js';
 
 test('builds a player embed URL only for numeric movie IDs', () => {
   assert.equal(movieEmbedUrl('155'), 'https://vidlink.pro/movie/155');
+  assert.equal(movieEmbedUrl('tt0133093'), 'https://vidlink.pro/movie/tt0133093');
   assert.throws(() => movieEmbedUrl('../155'));
   assert.throws(() => movieEmbedUrl('155?x=1'));
 });
