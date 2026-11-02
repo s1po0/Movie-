@@ -49,3 +49,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: node scripts/catalog-live-check.mjs
+  subtitle-menu-probe:
+    if: contains(github.event.head_commit.message, '[menu-probe]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm install --no-save --no-package-lock playwright-core && npm run build
+      - run: |
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/dimo-preview.log 2>&1 &
+          node scripts/menu-probe.mjs
