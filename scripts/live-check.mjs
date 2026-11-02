@@ -24,8 +24,8 @@ try {
   const playError = await frame.locator('video').evaluate(v => v.play().then(() => null).catch(error => error.message));
   if (playError) throw new Error(`Video play failed: ${playError}`);
   await page.waitForTimeout(20000);
-  const media = await frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, readyState: v.readyState, error: v.error?.code || null }));
-  if (media.currentTime <= 0) throw new Error(`No playback progress: ${JSON.stringify(media)}`);
+  const media = await frame.locator('video').evaluate(v => ({ paused: v.paused, currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null }));
+  if (media.currentTime < 1) throw new Error(`No meaningful playback progress: ${JSON.stringify(media)}`);
   console.log(`::notice title=Movie playback::Playback advanced to ${media.currentTime.toFixed(1)} seconds`);
 } catch (error) {
   console.log(`::warning title=Live movie check::${String(error.message).split('\n')[0]}`);
