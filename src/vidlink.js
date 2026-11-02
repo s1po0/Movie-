@@ -10,11 +10,7 @@ const safeUrl = value => {
   } catch { return null; }
 };
 
-export function movieEmbedUrl(id) {
-  const text = String(id);
-  if (!/^(?:\d{1,12}|tt\d{5,12})$/.test(text)) throw new Error('Invalid movie identifier');
-  return `https://vidlink.pro/movie/${text}`;
-}
+export { movieEmbedUrl } from './vidlink-embed.js';
 
 export function movieSourceUrl(id, now = Date.now()) {
   const text = String(id);

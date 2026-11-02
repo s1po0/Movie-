@@ -1,7 +1,6 @@
 import './style.css';
-import Hls from 'hls.js';
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
-import { createIcons, icons } from 'lucide';
+import { createIcons, Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload } from 'lucide';
 import { parseSubtitles, toVtt } from './subtitles.js';
 import { translationGroups, translationUrl, translatedText, translateGroup } from './translate.js';
 import { searchMovies } from './catalog.js';
@@ -9,13 +8,16 @@ import { movies } from './movies.js';
 import { metadataUrl, archiveFiles } from './archive.js';
 import { catalogUrl, mergeCatalogPage } from './cinemeta.js';
 import { isDonkeyPage } from './donkey.js';
-import { movieEmbedUrl } from './vidlink.js';
+import { movieEmbedUrl } from './vidlink-embed.js';
+import { createCatalogCache } from './catalog-cache.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const app = document.querySelector('#app');
+const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload };
+const getCatalog = createCatalogCache(getJson);
 let library = readLibrary();
-let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {};
+let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {}, playerTimer;
 let discovery = [], discoveryQuery = '', discoveryGenre = 'Horror', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
@@ -73,7 +75,7 @@ function render() {
   loadDiscovery('', 1);
 }
 function catalogCards(items) {
-  return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
+  return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy" decoding="async"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
 }
 function openModal(content) { const m = document.querySelector('#modal'); m.innerHTML = `<div class="dialog">${content}</div>`; m.classList.remove('hidden'); paintIcons(); }
 function closeModal() { document.querySelector('#modal').classList.add('hidden'); }
@@ -107,11 +109,13 @@ function localCatalogMovies(query) {
 function updateGenreButtons() {
   document.querySelectorAll('[data-genre]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.genre === (discoveryGenre || 'all'))));
 }
-function drawCatalog() {
+function drawCatalog(appendFrom = null) {
   const local = localCatalogMovies(discoveryQuery);
   const ids = new Set(local.map(movie => movie.imdbId).filter(Boolean));
   const items = [...local, ...discovery.filter(movie => !ids.has(movie.imdbId))];
-  document.querySelector('#catalog-cards').innerHTML = catalogCards(items);
+  const container = document.querySelector('#catalog-cards');
+  if (appendFrom === null) container.innerHTML = catalogCards(items);
+  else container.insertAdjacentHTML('beforeend', catalogCards(discovery.slice(appendFrom).filter(movie => !ids.has(movie.imdbId))));
   document.querySelector('#catalog-empty').classList.toggle('hidden', items.length > 0 || discoveryPage === 0);
   document.querySelector('#more-movies').classList.toggle('hidden', !discoveryMore);
   paintIcons();
@@ -123,10 +127,11 @@ async function loadDiscovery(query, page) {
   const button = document.querySelector('#more-movies'); button.disabled = true;
   status.textContent = 'فیلمەکان بار دەکرێن...';
   try {
-    const result = mergeCatalogPage(discovery, await getJson(catalogUrl(query, page, discoveryGenre)), query, page);
+    const result = mergeCatalogPage(discovery, await getCatalog(catalogUrl(query, page, discoveryGenre)), query, page);
     if (seq !== discoverySeq) return;
+    const previousCount = discovery.length;
     discovery = result.movies; discoveryMore = result.hasMore; discoveryAuto = true;
-    discoveryPage = page; button.textContent = 'فیلمی زیاتر'; drawCatalog();
+    discoveryPage = page; button.textContent = 'فیلمی زیاتر'; drawCatalog(page > 1 ? previousCount : null);
     status.textContent = discovery.length ? `${discovery.length.toLocaleString()} فیلم بارکرا؛ بەردەستبوونی پەخش بە سەرچاوەکە پەیوەستە.` : 'ئەنجامی زیاتری بەردەست نییە.';
   } catch {
     if (seq === discoverySeq) {
@@ -166,14 +171,36 @@ async function loadArchiveItem(id, movie, session, initialSubtitleRequest) {
     if (session === playerSession && !movie.url) message.textContent = 'لینکی فیلم بار نەبوو؛ ئینتەرنێت یان بەردەستبوونی سەرچاوەکە بپشکنە.';
   }
 }
-function playDirect(url, format) {
-  const video = document.querySelector('#video');
+async function playDirect(url, format) {
+  const video = document.querySelector('#video'), session = playerSession;
   if (!video) return;
-  if ((format === 'hls' || /\.m3u8(?:[?#]|$)/i.test(url)) && Hls.isSupported()) {
-    hls = new Hls(); hls.loadSource(url); hls.attachMedia(video);
-    hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) document.querySelector('#player-message').textContent = 'ستریمەکە بار نەبوو؛ لینک و دەستڕاگەیشتنی CORS بپشکنە.'; });
+  if (format === 'hls' || /\.m3u8(?:[?#]|$)/i.test(url)) {
+    try {
+      const { default: Hls } = await import('hls.js');
+      if (session !== playerSession || video !== document.querySelector('#video')) return;
+      if (Hls.isSupported()) {
+        hls = new Hls(); hls.loadSource(url); hls.attachMedia(video);
+        hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal && session === playerSession) document.querySelector('#player-message').textContent = 'ستریمەکە بار نەبوو؛ لینک و دەستڕاگەیشتنی CORS بپشکنە.'; });
+      } else video.src = url;
+    } catch {
+      if (session === playerSession) document.querySelector('#player-message').textContent = 'پلەیەری HLS بار نەبوو؛ ئینتەرنێت بپشکنە.';
+      return;
+    }
   } else video.src = url;
   video.play().catch(() => {});
+}
+function startEmbeddedPlayer(frame, session) {
+  clearTimeout(playerTimer);
+  const status = document.querySelector('#embedded-status');
+  const loading = document.querySelector('#embedded-loading');
+  if (!frame || !status || !loading) return;
+  loading.classList.remove('hidden');
+  status.textContent = 'پلەیەرەکە بار دەکرێت...';
+  playerTimer = setTimeout(() => {
+    if (session !== playerSession) return;
+    loading.classList.add('hidden');
+    status.textContent = 'ئەگەر پەخشەکە درێژی کێشا، دووبارە هەوڵ بدە یان لە پەڕەیەکی تر بیکەرەوە.';
+  }, 20000);
 }
 function openPlayer(movie) {
   if (!movie) return;
@@ -181,8 +208,16 @@ function openPlayer(movie) {
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
     const url = movieEmbedUrl(movie.tmdbId || movie.imdbId);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div><p class="player-message">دوگمەی پەخش لە ناو پلەیەرەکە دابگرە. ژێرنووس لە ڕێکخستنەکانی ئەو پلەیەرە هەڵبژێرە؛ وەرگێڕانی DIMO لێرە کار ناکات. بەردەستبوونی فیلم بە سەرچاوەکە پەیوەستە.</p><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">ئەگەر پلەیەرەکە نەکرایەوە، لە پەڕەیەکی تر بیکەرەوە ↗</a></div>`;
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><p class="player-hint">ژێرنووس لە ڕێکخستنەکانی پلەیەرەکە هەڵبژێرە؛ ئەگەر پەخش هێواش بوو کوالێتی کەمتر هەڵبژێرە، ئەگەر بەردەست بوو. وەرگێڕانی DIMO لێرە کار ناکات.</p></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
+    const frame = modal.querySelector('iframe'), session = playerSession;
+    startEmbeddedPlayer(frame, session);
+    frame.addEventListener('load', () => {
+      if (session !== playerSession) return;
+      document.querySelector('#embedded-loading')?.classList.add('hidden');
+      const status = document.querySelector('#embedded-status');
+      if (status) status.textContent = 'دوگمەی پەخش لە ناو پلەیەرەکە دابگرە.';
+    });
     return;
   }
   modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><video id="video" controls playsinline></video></div><div id="player-message" class="player-message">${movie.credit ? `${escapeHtml(movie.credit)}${movie.attributionUrl ? ` · <a href="${escapeHtml(movie.attributionUrl)}" target="_blank" rel="noopener noreferrer">HLS attribution ↗</a>` : ''} · <a href="${escapeHtml(movie.licenseUrl || `https://creativecommons.org/licenses/${movie.id === 'sample-dream' ? 'by/2.5/' : 'by/3.0/'}`)}" target="_blank" rel="noopener noreferrer">License ↗</a>` : movie.sourcePage ? `Internet Archive · <a href="${escapeHtml(movie.sourcePage)}" target="_blank" rel="noopener noreferrer">سەرچاوە ↗</a>` : 'ئەگەر ستریمەکە کار نەکرد، لینک و ئینتەرنێت بپشکنە.'}</div><div class="subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>ژێرنووس</h3><p id="subtitle-status">ژێرنووسێک هەڵبژێرە یان بار بکە</p></div></div><label class="upload-button">${icon('upload')} بارکردنی فایل<input id="subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label id="subtitle-source-label" class="hidden">فایلی ژێرنووسی فیلم<select id="subtitle-source"><option value="">ژێرنووس هەڵبژێرە</option></select></label><label>ژێرنووسی بەردەست<select id="track-select"><option value="off">کوژاندنەوە</option></select></label><label>زمانی وەرگێڕان<select id="language">${languages.map(([code, name]) => `<option value="${code}">${escapeHtml(name)}</option>`).join('')}<option value="custom">زمانێکی تر…</option></select></label><label id="custom-language-label" class="hidden">کۆدی زمان <input id="custom-language" dir="ltr" placeholder="e.g. it"></label></div><details class="translate-details"><summary>${icon('languages')} وەرگێڕانی ژێرنووس بە Google</summary><p>فایلی ژێرنووس بار بکە و زمان هەڵبژێرە. وەرگێڕان بەخۆڕاییە و پێویستی بە کلیل نییە؛ ژێرنووسەکان بۆ Google دەنێردرێن.</p><div class="translate-row"><button class="primary" id="translate">${icon('sparkles')} وەرگێڕان</button></div><p id="translation-status" class="form-hint" role="status"></p></details></div></div>`;
@@ -202,7 +237,7 @@ function openPlayer(movie) {
   const archiveId = movie.archiveId || (movie.id.startsWith('archive-') ? movie.id.slice(8) : null);
   if (archiveId) loadArchiveItem(archiveId, movie, session, subtitleRequest);
 }
-function closePlayer() { playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
+function closePlayer() { clearTimeout(playerTimer); playerSession++; if (hls) { hls.destroy(); hls = null; } const video = document.querySelector('#video'); if (video) { video.pause(); video.removeAttribute('src'); video.load(); } Object.values(subtitleUrls).forEach(URL.revokeObjectURL); subtitleUrls = {}; originalCues = null; current = null; document.querySelector('#player-modal').innerHTML = ''; document.querySelector('#player-modal').classList.add('hidden'); document.body.classList.remove('modal-open'); }
 function refreshTracks() {
   const video = document.querySelector('#video'), select = document.querySelector('#track-select'); if (!video || !select) return;
   const selected = select.value; select.innerHTML = '<option value="off">کوژاندنەوە</option>';
@@ -272,6 +307,10 @@ app.addEventListener('click', e => {
     document.querySelector('#more-movies').disabled = false;
     updateGenreButtons(); drawCatalog(); loadDiscovery('', 1);
   }
+  if (action === 'retry-player') {
+    const frame = document.querySelector('#player-modal iframe');
+    if (frame) { startEmbeddedPlayer(frame, playerSession); frame.src = frame.src; }
+  }
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
   const play = e.target.closest('[data-play]'); if (play) { const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
   const del = e.target.closest('[data-delete]'); if (del && confirm('ئەم فیلمە لە کتێبخانە بسڕدرێتەوە؟')) { library = library.filter(m => m.id !== del.dataset.delete); saveLibrary(); render(); toast('فیلمەکە سڕایەوە.'); }
@@ -300,6 +339,14 @@ app.addEventListener('change', async e => {
   if (e.target.id === 'subtitle-source' && e.target.value) loadSubtitleUrl(e.target.value);
   if (e.target.id === 'track-select') { const video = document.querySelector('#video'); Array.from(video.textTracks).forEach((t, i) => { t.mode = String(i) === e.target.value ? 'showing' : 'disabled'; }); }
   if (e.target.id === 'language') document.querySelector('#custom-language-label').classList.toggle('hidden', e.target.value !== 'custom');
+});
+window.addEventListener('message', event => {
+  const frame = document.querySelector('#player-modal iframe');
+  if (!frame || event.origin !== 'https://vidlink.pro' || event.source !== frame.contentWindow) return;
+  if (event.data?.type === 'PLAYER_EVENT' && ['play', 'timeupdate'].includes(event.data?.data?.event)) {
+    clearTimeout(playerTimer);
+    document.querySelector('#embedded-loading')?.classList.add('hidden');
+  }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!document.querySelector('#modal').classList.contains('hidden')) closeModal(); else if (current) closePlayer(); } });
 render();
