@@ -9,7 +9,6 @@ try {
     const data = await response.json();
     const result = mergeCatalogPage(movies, data, '', page);
     movies = result.movies;
-    console.log(`::notice title=Catalog page ${page}::${data.metas.length} returned, ${movies.length} unique, hasMore ${result.hasMore}`);
     if (!result.hasMore && page < 23) throw new Error(`Catalog stopped at page ${page}: ${movies.length} titles`);
   }
   if (movies.length <= 1000) throw new Error(`Only ${movies.length} unique titles returned`);
