@@ -42,14 +42,20 @@ try {
   if (!trackUrl || url.searchParams.get('sub_label') !== 'کوردی سۆرانی') throw Error('Sorani player option missing');
   const contextId = await wait(async function playerContext() {
     const { frameTree } = await send('Page.getFrameTree');
-    const find = t => t.frame?.url?.startsWith('https://vidlink.pro/movie/') ? t.frame.id : (t.childFrames || []).map(find).find(Boolean);
+    const find = t => { try { if (t.frame?.url && new URL(t.frame.url).searchParams.get('sub_file') === trackUrl) return t.frame.id; } catch {} return (t.childFrames || []).map(find).find(Boolean); };
     const frameId = find(frameTree); if (!frameId) return null;
     const world = await send('Page.createIsolatedWorld', { frameId, worldName: 'dimo-test' });
     return await evaluate("document.readyState === 'complete'", world.executionContextId) ? world.executionContextId : null;
   });
   const fetched = await evaluate(`fetch(${JSON.stringify(trackUrl)}).then(async r => ({status:r.status,text:await r.text()}))`, contextId);
   if (fetched.status !== 200 || !fetched.text.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(fetched.text)) throw Error(`Android translated subtitle interception failed: HTTP ${fetched.status}`);
-  await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('button')).some(b => /Captions.*کوردی سۆرانی/.test(b.innerText))", contextId); }, 60000);
+  try {
+    await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('button')).some(b => /Captions.*کوردی سۆرانی/.test(b.innerText))", contextId); }, 60000);
+  } catch (error) {
+    const diagnostic = await evaluate("JSON.stringify({text: document.body?.innerText?.slice(0,400), buttons: Array.from(document.querySelectorAll('button')).map(b=>b.innerText).filter(Boolean).slice(0,30)})", contextId).catch(() => 'frame context unavailable');
+    console.log(`::notice title=Player menu diagnostic::${diagnostic}`);
+    throw error;
+  }
   console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option');
 } catch(error) {
   console.log(`::error title=Android subtitle menu::${String(error.message).split('\n')[0]}`); process.exitCode=1;
