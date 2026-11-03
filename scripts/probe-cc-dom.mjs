@@ -11,7 +11,9 @@ try {
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
  await frame.evaluate(() => document.querySelector('#dontfoid')?.remove());
  await f.locator('#media-menu-button-1').click({timeout:10000});
- console.log('::notice title=CC after tap::'+JSON.stringify(await frame.evaluate(() => ({buttons:Array.from(document.querySelectorAll('button')).map(e=>({text:e.innerText,aria:e.getAttribute('aria-label'),id:e.id,expanded:e.getAttribute('aria-expanded'),visible:!!e.getClientRects().length})).filter(e=>e.visible),menus:Array.from(document.querySelectorAll('[role=menuitemradio]')).map(e=>({text:e.innerText,rect:e.getBoundingClientRect().toJSON(),hidden:getComputedStyle(e).visibility,display:getComputedStyle(e).display})).slice(0,12)}))));
+ console.log('::notice title=CC after tap::'+JSON.stringify(await frame.evaluate(() => {const b=document.querySelector('#media-menu-button-1');const r=b.getBoundingClientRect();return {html:b.parentElement?.parentElement?.outerHTML.slice(0,5500),point:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML.slice(0,1000), scripts:Array.from(document.scripts).map(s=>s.src).filter(Boolean)};})));
+ await f.locator('#media-menu-button-1').focus(); await p.keyboard.press('Enter');
+ console.log('::notice title=After keyboard::'+JSON.stringify(await frame.evaluate(()=>({expanded:document.querySelector('#media-menu-button-1')?.getAttribute('aria-expanded'),visible:Array.from(document.querySelectorAll('[role=menuitemradio]')).filter(e=>e.getBoundingClientRect().width).map(e=>e.textContent.trim())}))));
  const english=f.locator('[role="menuitemradio"]:visible').filter({hasText:'English'}).first();
  await english.click({timeout:10000});
  await f.locator('#media-menu-button-1').click({timeout:10000});
