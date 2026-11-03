@@ -11,6 +11,7 @@ try {
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
  await frame.evaluate(() => document.querySelector('#dontfoid')?.remove());
  await f.locator('#media-menu-button-1').click({timeout:10000});
+ console.log('::notice title=CC after tap::'+JSON.stringify(await frame.evaluate(() => ({buttons:Array.from(document.querySelectorAll('button')).map(e=>({text:e.innerText,aria:e.getAttribute('aria-label'),id:e.id,expanded:e.getAttribute('aria-expanded'),visible:!!e.getClientRects().length})).filter(e=>e.visible),menus:Array.from(document.querySelectorAll('[role=menuitemradio]')).map(e=>({text:e.innerText,rect:e.getBoundingClientRect().toJSON(),hidden:getComputedStyle(e).visibility,display:getComputedStyle(e).display})).slice(0,12)}))));
  const english=f.locator('[role="menuitemradio"]:visible').filter({hasText:'English'}).first();
  await english.click({timeout:10000});
  await f.locator('#media-menu-button-1').click({timeout:10000});
