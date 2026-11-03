@@ -3,7 +3,7 @@ import { withSubtitleTrack, subtitleTrackUrl } from '../src/menu-subtitles.js';
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
 const p=await browser.newPage({viewport:{width:390,height:844}}); const token='0123456789abcdef0123456789abcdef';
 try {
- await p.route('https://www.intellipopup.com/Db/tkute.min.js', r => r.fulfill({status:200,contentType:'application/javascript',body:''}));
+ await p.route('https://c.adsco.re/', r => r.fulfill({status:200,contentType:'application/javascript',body:''}));
  await p.route(subtitleTrackUrl(token), r=>r.fulfill({status:200,contentType:'text/vtt',body:'WEBVTT\n\n00:00:00.000 --> 00:10:00.000\nسڵاو\n'}));
  await p.goto('http://127.0.0.1:5173/'); await p.locator('[data-play="cinebloom-155"]').first().click();
  await p.frameLocator('iframe').locator('video').waitFor({timeout:40000});
@@ -18,5 +18,5 @@ try {
  await sorani.click({timeout:10000});
  const checked=await sorani.getAttribute('aria-checked');
  if(checked!=='true') throw Error(`Sorani selection did not apply: ${checked}`);
- console.log('::notice title=Player caption selection::Selected Sorani in the CC menu with only the intellipopup script blocked');
+ console.log('::notice title=Player caption selection::Selected Sorani in the CC menu with only the adsco script blocked');
 } catch(e){console.log(`::error title=CC probe::${String(e.message).replace(/\n/g,' | ').slice(0,1200)}`);process.exitCode=1;} finally{await browser.close();}
