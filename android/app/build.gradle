@@ -16,7 +16,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Configure a stable private signing key in CI before distributing updates.
+    // Never commit the key or its passwords to this repository.
+    def updateKey = System.getenv('ANDROID_KEYSTORE_PATH')
+    if (updateKey) {
+        if (!System.getenv('ANDROID_KEYSTORE_PASSWORD') || !System.getenv('ANDROID_KEY_ALIAS') || !System.getenv('ANDROID_KEY_PASSWORD')) {
+            throw new GradleException('Incomplete Android signing configuration')
+        }
+        signingConfigs {
+            persistent {
+                storeFile file(updateKey)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (updateKey) signingConfig signingConfigs.persistent
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

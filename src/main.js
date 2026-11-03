@@ -128,7 +128,7 @@ async function checkForUpdate(interactive = true) {
 }
 function updateDialog() {
   if (!availableUpdate) return;
-  openModal(`<div class="dialog-header"><div><span class="overline">NALI UPDATE</span><h2>وەشانێکی نوێ ئامادەیە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">وەشانی ${availableUpdate.version} بەردەستە. دوای دابەزین، لە ئاگادارکردنەوەکە دایمەزرێنە؛ پەسەندکردنی Android پێویستە.</p><button class="primary full" data-action="download-update">${icon('sparkles')} نوێکردنەوە</button>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">NALI UPDATE</span><h2>وەشانێکی نوێ ئامادەیە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">وەشانی ${availableUpdate.version} بەردەستە. دوای دابەزین، لە ئاگادارکردنەوەکە دایمەزرێنە؛ پەسەندکردنی Android و یەکسانبوونی واژۆی وەشانەکان پێویستە.</p><button class="primary full" data-action="download-update">${icon('sparkles')} نوێکردنەوە</button>`);
 }
 async function downloadUpdate() {
   if (!availableUpdate) return;
