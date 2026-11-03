@@ -12,7 +12,7 @@ import { movieEmbedUrl } from './vidlink-embed.js';
 import { createCatalogCache } from './catalog-cache.js';
 import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 import { findMovieSubtitles } from './subtitle-discovery.js';
-import { translateMenuSubtitles, withSubtitleTrack } from './menu-subtitles.js';
+import { translateMenuSubtitles, withSubtitleTrack, createMenuTranslationCache } from './menu-subtitles.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
@@ -21,6 +21,7 @@ const nativeMenuAvailable = () => Capacitor.isNativePlatform() && Capacitor.isPl
 const app = document.querySelector('#app');
 const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film };
 const getCatalog = createCatalogCache(getJson);
+const menuTranslationCache = createMenuTranslationCache();
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {}, playerTimer;
 let embeddedSubtitles = null, embeddedSourceRequest = 0, embeddedHasSource = false, embeddedOffset = 0;
@@ -286,9 +287,14 @@ async function translateForPlayerMenu(text, session, requestId) {
   let progress = '';
   try {
     status('Google ژێرنووسەکە بۆ کوردی سۆرانی وەردەگێڕێت...');
-    const vtt = await translateMenuSubtitles(text, googleTranslateForMenu, {
-      isCurrent: valid, onProgress: (done, total) => { progress = `${done}/${total}`; status(`وەرگێڕانی Google... ${done} / ${total}`); },
-    });
+    let vtt = menuTranslationCache.get(text);
+    if (!vtt) {
+      vtt = await translateMenuSubtitles(text, googleTranslateForMenu, {
+        isCurrent: valid, onProgress: (done, total) => { progress = `${done}/${total}`; status(`وەرگێڕانی Google... ${done} / ${total}`); },
+      });
+      if (!valid()) return;
+      menuTranslationCache.set(text, vtt);
+    }
     if (!valid()) return;
     const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
     await MenuSubtitle.setTrack({ token, text: vtt });
