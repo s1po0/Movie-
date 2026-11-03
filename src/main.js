@@ -13,10 +13,13 @@ import { createCatalogCache } from './catalog-cache.js';
 import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 import { findMovieSubtitles } from './subtitle-discovery.js';
 import { translateMenuSubtitles, withSubtitleTrack, createMenuTranslationCache } from './menu-subtitles.js';
+import { findUpdate, releaseApi } from './update.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const MenuSubtitle = registerPlugin('MenuSubtitle');
+const Updater = registerPlugin('Updater');
+let availableUpdate = null;
 const nativeMenuAvailable = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('MenuSubtitle');
 const app = document.querySelector('#app');
 const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film };
@@ -39,19 +42,19 @@ function render() {
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
-        <a href="#home" class="brand" aria-label="ڕووناک، سەرەتا"><span class="brand-mark">${icon('play')}</span><span class="brand-word">ڕووناک<small>RUNAK</small></span></a>
+        <a href="#home" class="brand" aria-label="نالی، سەرەتا"><span class="brand-mark">${icon('play')}</span><span class="brand-word">نالی<small>NALI</small></span></a>
         <nav aria-label="گەڕان"><a class="nav-active" href="#home">سەرەتا</a><a href="#catalog">فیلمەکان</a><a href="#genres">جۆرەکان</a><button class="nav-library" data-action="library">لیستەکەم</button></nav>
-        <div class="header-actions"><button class="header-search" data-action="focus-search" aria-label="گەڕان">${icon('search')}</button><button class="top-add" data-action="library">${icon('bookmark')} <span>لیستەکەم</span></button></div>
+        <div class="header-actions"><button class="update-check" data-action="check-update" aria-label="پشکنینی نوێکاری">${icon('sparkles')}<span class="update-dot hidden"></span></button><button class="header-search" data-action="focus-search" aria-label="گەڕان">${icon('search')}</button><button class="top-add" data-action="library">${icon('bookmark')} <span>لیستەکەم</span></button></div>
       </header>
       <main id="home">
         <section class="hero" aria-label="پێشوازی">
           <div class="hero-shade"></div><div class="hero-content">
-            <div class="eyebrow"><span></span> ڕووناک · جیهانی سینەما</div>
+            <div class="eyebrow"><span></span> نالی · جیهانی سینەما</div>
             <h1>چیرۆکەکان<br><em>لێرە دەست پێدەکەن.</em></h1>
             <p>لە جیهانێک فیلمدا، چیرۆکی دڵخوازت بدۆزەرەوە و بە زمانی خۆت سەیری بکە.</p>
             <div class="hero-actions"><button class="primary" data-play="cinebloom-155">${icon('play')} سەیری <span dir="ltr">The Dark Knight</span></button><a class="ghost" href="#catalog">${icon('film')} دۆزینەوەی فیلم</a></div>
             <div class="hero-caption"><span>✦</span> چیرۆکی زۆر، یەک شوێن</div>
-          </div><div class="hero-index"><span>RUNAK</span><div></div> A WORLD OF STORIES</div>
+          </div><div class="hero-index"><span>NALI</span><div></div> A WORLD OF STORIES</div>
         </section>
         <div class="shelf-intro"><div><span class="overline">CURATED FOR YOU</span><h2>ئەمڕۆ چی دەبینین؟ <span>✳</span></h2><p>چیرۆکێکی نوێ چاوەڕێتە.</p></div><a href="#catalog">هەموو فیلمەکان ${icon('arrow-up-left')}</a></div>
         <div class="shelf-list">${shelves.map(shelf => `<section class="shelf" aria-labelledby="shelf-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="shelf-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-genre="${shelf.genre || 'all'}">هەمووی ${icon('chevron-left')}</button></div><div class="shelf-rail" id="shelf-${shelf.id}"><div class="shelf-loading">فیلمەکان بار دەکرێن...</div></div></section>`).join('')}</div>
@@ -64,7 +67,7 @@ function render() {
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
       </main>
-      <footer><span class="footer-brand">ڕووناک <span>✳</span></span><span>بۆ خۆشەویستانی چیرۆک و سینەما</span><span>A WORLD OF STORIES</span></footer>
+      <footer><span class="footer-brand">نالی <span>✳</span></span><span>بۆ خۆشەویستانی چیرۆک و سینەما</span><span>A WORLD OF STORIES</span></footer>
       <div class="mobile-nav" aria-label="گەڕانی مۆبایل"><a href="#home">${icon('house')}<span>سەرەتا</span></a><a href="#catalog">${icon('search')}<span>گەڕان</span></a><a href="#genres">${icon('film')}<span>جۆرەکان</span></a><button data-action="library">${icon('bookmark')}<span>لیستەکەم</span></button></div>
     </div>
     <div class="overlay hidden" id="modal" role="dialog" aria-modal="true"></div>
@@ -83,6 +86,7 @@ function render() {
   }
   loadDiscovery('', 1);
   loadShelves();
+  if (Capacitor.isNativePlatform()) checkForUpdate(false);
 }
 function catalogCards(items) {
   return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy" decoding="async"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
@@ -103,6 +107,34 @@ async function loadShelves() {
     }
   }));
 }
+async function checkForUpdate(interactive = true) {
+  if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('Updater')) {
+    if (interactive) toast('پشکنینی نوێکاری بۆ بەرنامەی Android ـە.');
+    return;
+  }
+  if (interactive) toast('پشکنینی نوێکاری...');
+  try {
+    const info = await Updater.getVersion();
+    const response = await CapacitorHttp.get({ url: releaseApi, responseType: 'json', connectTimeout: 10000, readTimeout: 10000 });
+    if (response.status !== 200) throw new Error('Update check failed');
+    const releases = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+    availableUpdate = findUpdate(releases, info.versionCode);
+    document.querySelector('.update-dot')?.classList.toggle('hidden', !availableUpdate);
+    if (availableUpdate) {
+      if (interactive) updateDialog();
+      else toast('وەشانێکی نوێ بەردەستە؛ دوگمەی نوێکاری دابگرە.');
+    } else if (interactive) toast('بەرنامەکەت نوێترین وەشانە.');
+  } catch { if (interactive) toast('نوێکاری نەشکنرا؛ ئینتەرنێت بپشکنە.'); }
+}
+function updateDialog() {
+  if (!availableUpdate) return;
+  openModal(`<div class="dialog-header"><div><span class="overline">NALI UPDATE</span><h2>وەشانێکی نوێ ئامادەیە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">وەشانی ${availableUpdate.version} بەردەستە. دوای دابەزین، لە ئاگادارکردنەوەکە دایمەزرێنە؛ پەسەندکردنی Android پێویستە.</p><button class="primary full" data-action="download-update">${icon('sparkles')} نوێکردنەوە</button>`);
+}
+async function downloadUpdate() {
+  if (!availableUpdate) return;
+  try { await Updater.download({ url: availableUpdate.url }); closeModal(); toast('نوێکاری دادەبەزێت؛ پاش تەواوبوون ئاگادارکردنەوەکە دابگرە.'); }
+  catch { toast('دابەزاندنی نوێکاری سەرکەوتوو نەبوو.'); }
+}
 function openModal(content) { const m = document.querySelector('#modal'); m.innerHTML = `<div class="dialog">${content}</div>`; m.classList.remove('hidden'); paintIcons(); }
 function closeModal() { document.querySelector('#modal').classList.add('hidden'); }
 function libraryDialog() {
@@ -110,7 +142,7 @@ function libraryDialog() {
   openModal(`<div class="dialog-header"><div><span class="overline">YOUR LIST</span><h2>لیستەکەم</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">فیلم و لینکە پاشەکەوتکراوەکانت لێرەن.</p><div class="saved-list">${items || '<p class="saved-empty">هێشتا هیچ فیلمێکت زیاد نەکردووە.</p>'}</div><button class="primary full" data-action="add">${icon('plus')} لینکی فیلم زیاد بکە</button>`);
 }
 function addDialog() {
-  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری ڕووناک، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی ماڵپەڕ لە پلەیەری ماڵپەڕەکە دەکرێتەوە؛ ژێرنووسی ڕووناک بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری نالی، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی ماڵپەڕ لە پلەیەری ماڵپەڕەکە دەکرێتەوە؛ ژێرنووسی نالی بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
 }
 function helpDialog() { openModal(`<div class="dialog-header"><div><span class="overline">HOW IT WORKS</span><h2>چۆن کار دەکات؟</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><div class="help-list"><p><b>١</b><span>لینکی ڕاستەوخۆی ستریمەکەت زیاد بکە و فیلمەکە بکەرەوە.</span></p><p><b>٢</b><span>فایلی ژێرنووسی SRT یان VTT هەڵبژێرە، یان لینکی ژێرنووس دابنێ.</span></p><p><b>٣</b><span>زمان هەڵبژێرە و دوگمەی وەرگێڕان دابگرە؛ پێویست بە کلیل یان پارەدان نییە.</span></p></div><p class="form-hint">ژێرنووسەکان بۆ Google دەنێردرێن. خزمەتگوزارییە بەخۆڕاییەکە فەرمی نییە؛ لەوانەیە سنووردار بکرێت یان بوەستێت. هەندێک ستریم یان زمان لەوانەیە پشتگیری نەکرێت.</p>`); }
 function toast(message) { const el = document.querySelector('.toast'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 4500); }
@@ -349,7 +381,7 @@ function openPlayer(movie) {
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
     const url = movieEmbedUrl(movie.tmdbId || movie.imdbId);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی ئینگلیزی<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTTی ئینگلیزی بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی ڕووناک بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی ڕووناک نیشان نادات.</p></div></div>`;
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی ئینگلیزی<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTTی ئینگلیزی بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی نالی بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی نالی نیشان نادات.</p></div></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
@@ -461,6 +493,8 @@ app.addEventListener('click', e => {
     if (frame) { embeddedSubtitles?.setTime(0); startEmbeddedPlayer(frame, playerSession); frame.src = frame.src; }
   }
   if (action === 'focus-search') { document.querySelector('#catalog').scrollIntoView({ behavior: 'smooth' }); document.querySelector('#catalog-search').focus({ preventScroll: true }); }
+  if (action === 'check-update') checkForUpdate();
+  if (action === 'download-update') downloadUpdate();
   if (action === 'library') libraryDialog();
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
   const play = e.target.closest('[data-play]'); if (play) { if (play.closest('#modal')) closeModal(); const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
