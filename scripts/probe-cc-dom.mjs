@@ -9,6 +9,7 @@ try {
  await p.locator('iframe').evaluate((el,src)=>el.src=src,withSubtitleTrack('https://vidlink.pro/movie/155',token));
  const f=p.frameLocator('iframe'); await f.locator('video').waitFor({timeout:40000}); await p.waitForTimeout(8000);
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
+ console.log('::notice title=Ad diagnostics::'+JSON.stringify(await frame.evaluate(() => ({ad:document.querySelector('#dontfoid')?.outerHTML, scripts:Array.from(document.scripts).map(x=>x.src).filter(Boolean), resources:performance.getEntriesByType('resource').map(x=>x.name).filter(x=>/js|9905914/.test(x)).slice(-40)}))));
  await frame.evaluate(() => document.querySelector('#dontfoid')?.remove());
  // The provider can initialize with the menu already open; avoid toggling it shut.
  const sorani=f.locator('[role="menuitemradio"]:visible').filter({hasText:'کوردی سۆرانی'}).first();
