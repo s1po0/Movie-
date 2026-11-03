@@ -9,7 +9,7 @@ import { metadataUrl, archiveFiles } from './archive.js';
 import { catalogUrl, mergeCatalogPage, catalogResults } from './cinemeta.js';
 import { isDonkeyPage } from './donkey.js';
 import { movieEmbedUrl, seriesEmbedUrl } from './vidlink-embed.js';
-import { asianCatalogUrl, asianCatalogResults, subtitleIndexUrl, hasEnglishSubtitle } from './asian-catalog.js';
+import { asianCatalogUrl, asianCatalogResults, asianSeedIds, asianMetadataUrl, koreanDramaSearchUrl, subtitleIndexUrl, hasEnglishSubtitle } from './asian-catalog.js';
 import { createCatalogCache } from './catalog-cache.js';
 import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 import { findMovieSubtitles } from './subtitle-discovery.js';
@@ -32,9 +32,9 @@ let embeddedSubtitles = null, embeddedSourceRequest = 0, embeddedHasSource = fal
 let embeddedMenuSource = null, embeddedMenuToken = null, embeddedTime = 0;
 const genres = [['all','هەمووی'], ['Action','ئەکشن'], ['Adventure','سەرکێشی'], ['Comedy','کۆمیدی'], ['Drama','دراما'], ['Horror','ترسناک'], ['Thriller','هیجان'], ['Crime','تاوان'], ['Mystery','نهێنی'], ['Romance','ڕۆمانسی'], ['Sci-Fi','زانستی خەیاڵی'], ['Fantasy','خەیاڵی'], ['Animation','ئەنیمەیشن'], ['Biography','ژیاننامە'], ['Sport','وەرزشی'], ['Family','خێزانی'], ['Documentary','دۆکیومێنتاری'], ['History','مێژوویی'], ['War','جەنگ'], ['Western','وێستەرن']];
 const shelves = [{id:'popular', genre:'', title:'بەناوبانگەکان', subtitle:'فیلمەکانی سەر زارەکان'}, {id:'action', genre:'Action', title:'ئەکشن و سەرکێشی', subtitle:'بۆ دەمێکی پڕ لە هیجان'}, {id:'horror', genre:'Horror', title:'جیهانی ترس', subtitle:'بۆ ئەوانەی دڵێکی بوێریان هەیە'}];
-let shelfMovies = [], asianMovies = [];
+let shelfMovies = [], asianMovies = [], asianObserver;
 let asianState = {};
-const asianShelves = [{id:'korean', title:'درامای کۆری', subtitle:'زنجیرە کۆرییەکان'}, {id:'japanese', title:'سینەمای ژاپۆنی', subtitle:'فیلم لە ژاپۆن'}, {id:'chinese', title:'سینەمای چینی', subtitle:'فیلم لە چین، هۆنگ کۆنگ و تایوان'}];
+const asianShelves = [{id:'koreanMovie', title:'سینەمای کۆری', subtitle:'فیلم لە کۆریا'}, {id:'korean', title:'درامای کۆری', subtitle:'زنجیرە کۆرییەکان'}, {id:'japanese', title:'سینەمای ژاپۆنی', subtitle:'فیلم لە ژاپۆن'}, {id:'chinese', title:'سینەمای چینی', subtitle:'فیلم لە چین، هۆنگ کۆنگ و تایوان'}];
 let discovery = [], discoveryQuery = '', discoveryGenre = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
@@ -91,7 +91,13 @@ function render() {
   loadDiscovery('', 1);
   loadShelves();
   asianMovies = []; asianState = {};
-  asianShelves.forEach(shelf => loadAsian(shelf.id));
+  asianObserver?.disconnect();
+  if ('IntersectionObserver' in window) {
+    asianObserver = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { asianObserver?.disconnect(); asianShelves.forEach(shelf => loadAsian(shelf.id)); }
+    }, { rootMargin: '600px' });
+    asianObserver.observe(document.querySelector('#asian'));
+  } else asianShelves.forEach(shelf => loadAsian(shelf.id));
   if (Capacitor.isNativePlatform()) checkForUpdate(false);
 }
 function catalogCards(items) {
@@ -113,6 +119,32 @@ async function loadShelves() {
     }
   }));
 }
+async function mapLimited(items, limit, task) {
+  const results = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; results[i] = await task(items[i]); }
+  }));
+  return results;
+}
+async function loadKoreanSearch(query, seq) {
+  try {
+    const data = await getCatalog(koreanDramaSearchUrl(query));
+    const candidates = asianCatalogResults('korean', data).slice(0, 20);
+    const verified = new Array(candidates.length); let next = 0;
+    await Promise.all(Array.from({length: Math.min(3, candidates.length)}, async () => {
+      while (next < candidates.length && seq === discoverySeq) {
+        const i = next++;
+        try { if (hasEnglishSubtitle(await subtitleHttp(subtitleIndexUrl(candidates[i]), 'json'))) verified[i] = candidates[i]; } catch { /* subtitle index unavailable */ }
+      }
+    }));
+    if (seq !== discoverySeq) return;
+    const known = new Set(discovery.map(item => item.id));
+    const items = verified.filter(item => item && !known.has(item.id));
+    if (!items.length) return;
+    discovery.push(...items); drawCatalog();
+    document.querySelector('#discovery-status').textContent = `${discovery.length.toLocaleString()} ئەنجامی فیلم و دراما بارکرا.`;
+  } catch { /* Movie results remain usable if series search fails. */ }
+}
 async function loadAsian(region) {
   const rail = document.querySelector(`#asian-${region}`);
   const status = document.querySelector(`#asian-status-${region}`);
@@ -124,10 +156,14 @@ async function loadAsian(region) {
   status.textContent = 'گەڕان و پشکنینی ژێرنووس...';
   try {
     const pages = Array.from({ length: 8 }, (_, i) => state.page + i + 1);
-    const batches = await Promise.all(pages.map(page => getCatalog(asianCatalogUrl(region, page))));
+    const [batches, seedResults] = await Promise.all([
+      Promise.all(pages.map(page => getCatalog(asianCatalogUrl(region, page)))),
+      state.page === 0 ? mapLimited(asianSeedIds[region], 3, id => subtitleHttp(asianMetadataUrl(region, id), 'json').catch(() => null)) : [],
+    ]);
     if (!rail.isConnected || asianState[region] !== state) return;
     state.page += batches.length;
-    const candidates = batches.flatMap(data => asianCatalogResults(region, data)).filter(item => {
+    const seeds = seedResults.flatMap(data => data?.meta ? asianCatalogResults(region, { metas: [data.meta] }) : []);
+    const candidates = [...seeds, ...batches.flatMap(data => asianCatalogResults(region, data))].filter(item => {
       if (state.seen.has(item.id)) return false;
       state.seen.add(item.id); return true;
     });
@@ -242,6 +278,7 @@ async function loadDiscovery(query, page) {
     discovery = result.movies; discoveryMore = result.hasMore; discoveryAuto = true;
     discoveryPage = page; button.textContent = 'فیلمی زیاتر'; drawCatalog(page > 1 ? previousCount : null);
     status.textContent = discovery.length ? `${discovery.length.toLocaleString()} فیلم بارکرا؛ بەردەستبوونی پەخش بە سەرچاوەکە پەیوەستە.` : 'ئەنجامی زیاتری بەردەست نییە.';
+    if (query.trim()) loadKoreanSearch(query, seq);
   } catch {
     if (seq === discoverySeq) {
       discoveryMore = page > 1 && discovery.length > 0; discoveryAuto = false;

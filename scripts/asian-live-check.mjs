@@ -1,9 +1,10 @@
-import { asianCatalogUrl, asianCatalogResults, subtitleIndexUrl, hasEnglishSubtitle } from '../src/asian-catalog.js';
+import { asianCatalogUrl, asianCatalogResults, asianSeedIds, asianMetadataUrl, subtitleIndexUrl, hasEnglishSubtitle } from '../src/asian-catalog.js';
 try {
   const fetchJson = async url => { const r = await fetch(url, {signal: AbortSignal.timeout(25000)}); if (!r.ok) throw Error(`${r.status} ${url}`); return r.json(); };
-  for (const region of ['korean','japanese','chinese']) {
+  for (const region of ['koreanMovie','korean','japanese','chinese']) {
     const batches = await Promise.all(Array.from({length:8}, (_,i) => fetchJson(asianCatalogUrl(region,i+1))));
-    const candidates = batches.flatMap(data => asianCatalogResults(region,data));
+    const seedData = await Promise.all(asianSeedIds[region].map(id => fetchJson(asianMetadataUrl(region,id)).catch(() => null)));
+    const candidates = [...seedData.flatMap(data => data?.meta ? asianCatalogResults(region,{metas:[data.meta]}) : []), ...batches.flatMap(data => asianCatalogResults(region,data))];
     let verified = 0; let example;
     for (const movie of candidates) {
       try { if (hasEnglishSubtitle(await fetchJson(subtitleIndexUrl(movie)))) { verified++; example ||= movie.title; } } catch { /* source may fail */ }

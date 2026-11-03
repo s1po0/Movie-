@@ -11,12 +11,14 @@ try {
       const genre = /genre=([^&.]+)/.exec(url)?.[1] || 'Popular';
       const names = url.includes('search=') ? ['The Matrix'] : [`${genre} One`, `${genre} Two`];
       if (url.includes('/catalog/series/')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({metas:[{id:'tt10850932',type:'series',name:'Korean drama',country:'South Korea',genres:['Drama'],moviedb_id:94796}]})}); return; }
-      route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ metas: [...names.map((name, index) => ({ id: `tt${String(1000001 + index)}`, type: 'movie', name, releaseInfo: '2020' })),{id:'tt0012345',type:'movie',name:'Japanese film',country:'Japan'}, {id:'tt0012346',type:'movie',name:'Chinese film',country:'China'}] }) });
+      route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ metas: [...names.map((name, index) => ({ id: `tt${String(1000001 + index)}`, type: 'movie', name, releaseInfo: '2020' })),{id:'tt6751668',type:'movie',name:'Korean film',country:'South Korea'}, {id:'tt0012345',type:'movie',name:'Japanese film',country:'Japan'}, {id:'tt0012346',type:'movie',name:'Chinese film',country:'China'}] }) });
     });
     await page.route('https://api.thesubtitledb.org/**', route => route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({subtitles:[{lang:'eng',url:'https://api.thesubtitledb.org/integrations/stremio/s/123.vtt'}]})}));
     await page.route('https://images.metahub.space/**', route => route.abort());
     await page.goto('http://127.0.0.1:5173/');
     await page.locator('#shelf-action .catalog-card').first().waitFor();
+    await page.locator('#asian').scrollIntoViewIfNeeded();
+    await page.locator('#asian-koreanMovie').getByText('Korean film').waitFor();
     await page.locator('#asian-korean').getByText('Korean drama').waitFor();
     await page.locator('#asian-japanese').getByText('Japanese film').waitFor();
     await page.locator('#asian-chinese').getByText('Chinese film').waitFor();
@@ -32,6 +34,7 @@ try {
     if (await page.locator('.catalog-filters [data-genre="Horror"]').getAttribute('aria-pressed') !== 'true') throw Error('Genre selection did not update');
     await page.locator('#catalog-search').fill('Matrix');
     await page.locator('#catalog-cards').getByText('The Matrix').first().waitFor();
+    await page.locator('#catalog-cards').getByText('Korean drama').first().waitFor();
     if (await page.locator('#library').count()) throw Error('The removed library section is still visible');
     await page.locator('.top-add[data-action="library"]').click();
     await page.locator('#modal [data-action="add"]').click();
