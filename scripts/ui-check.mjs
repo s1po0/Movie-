@@ -10,11 +10,22 @@ try {
       const url = route.request().url();
       const genre = /genre=([^&.]+)/.exec(url)?.[1] || 'Popular';
       const names = url.includes('search=') ? ['The Matrix'] : [`${genre} One`, `${genre} Two`];
-      route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ metas: names.map((name, index) => ({ id: `tt${String(1000001 + index)}`, type: 'movie', name, releaseInfo: '2020' })) }) });
+      if (url.includes('/catalog/series/')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({metas:[{id:'tt10850932',type:'series',name:'Korean drama',country:'South Korea',genres:['Drama'],moviedb_id:94796}]})}); return; }
+      route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: JSON.stringify({ metas: [...names.map((name, index) => ({ id: `tt${String(1000001 + index)}`, type: 'movie', name, releaseInfo: '2020' })),{id:'tt0012345',type:'movie',name:'Japanese film',country:'Japan'}, {id:'tt0012346',type:'movie',name:'Chinese film',country:'China'}] }) });
     });
+    await page.route('https://api.thesubtitledb.org/**', route => route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({subtitles:[{lang:'eng',url:'https://api.thesubtitledb.org/integrations/stremio/s/123.vtt'}]})}));
     await page.route('https://images.metahub.space/**', route => route.abort());
     await page.goto('http://127.0.0.1:5173/');
     await page.locator('#shelf-action .catalog-card').first().waitFor();
+    await page.locator('#asian-korean').getByText('Korean drama').waitFor();
+    await page.locator('#asian-japanese').getByText('Japanese film').waitFor();
+    await page.locator('#asian-chinese').getByText('Chinese film').waitFor();
+    await page.locator('#asian-korean [data-play]').first().click();
+    await page.locator('#player-modal iframe[src*="/tv/94796/1/1"]').waitFor();
+    await page.locator('#episode-number').fill('2');
+    await page.locator('[data-action=play-episode]').click();
+    await page.locator('#player-modal iframe[src*="/tv/94796/1/2"]').waitFor();
+    await page.locator('#player-modal [data-action=close-player]').click();
     if ((await page.locator('.catalog-filters button').count()) !== 20) throw Error('Missing genre filters');
     await page.locator('.catalog-filters [data-genre="Horror"]').click();
     await page.locator('#catalog-cards').getByText('Horror One').waitFor();

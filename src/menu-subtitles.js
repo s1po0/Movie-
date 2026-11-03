@@ -74,7 +74,7 @@ export function subtitleTrackUrl(token) {
 
 export function withSubtitleTrack(embedUrl, token, time = 0) {
   const url = new URL(embedUrl);
-  if (url.origin !== 'https://vidlink.pro' || !/^\/movie\/(?:\d{1,12}|tt\d{5,12})$/.test(url.pathname)) throw new Error('Invalid player');
+  if (url.origin !== 'https://vidlink.pro' || !(/^\/movie\/(?:\d{1,12}|tt\d{5,12})$/.test(url.pathname) || /^\/tv\/\d{1,12}\/[1-9]\d{0,2}\/[1-9]\d{0,3}$/.test(url.pathname))) throw new Error('Invalid player');
   url.searchParams.set('sub_file', subtitleTrackUrl(token));
   url.searchParams.set('sub_label', 'کوردی سۆرانی');
   if (Number.isFinite(time) && time > 0) url.searchParams.set('startAt', String(Math.floor(time)));

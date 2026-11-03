@@ -8,7 +8,8 @@ import { movies } from './movies.js';
 import { metadataUrl, archiveFiles } from './archive.js';
 import { catalogUrl, mergeCatalogPage, catalogResults } from './cinemeta.js';
 import { isDonkeyPage } from './donkey.js';
-import { movieEmbedUrl } from './vidlink-embed.js';
+import { movieEmbedUrl, seriesEmbedUrl } from './vidlink-embed.js';
+import { asianCatalogUrl, asianCatalogResults, subtitleIndexUrl, hasEnglishSubtitle } from './asian-catalog.js';
 import { createCatalogCache } from './catalog-cache.js';
 import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 import { findMovieSubtitles } from './subtitle-discovery.js';
@@ -31,7 +32,9 @@ let embeddedSubtitles = null, embeddedSourceRequest = 0, embeddedHasSource = fal
 let embeddedMenuSource = null, embeddedMenuToken = null, embeddedTime = 0;
 const genres = [['all','هەمووی'], ['Action','ئەکشن'], ['Adventure','سەرکێشی'], ['Comedy','کۆمیدی'], ['Drama','دراما'], ['Horror','ترسناک'], ['Thriller','هیجان'], ['Crime','تاوان'], ['Mystery','نهێنی'], ['Romance','ڕۆمانسی'], ['Sci-Fi','زانستی خەیاڵی'], ['Fantasy','خەیاڵی'], ['Animation','ئەنیمەیشن'], ['Biography','ژیاننامە'], ['Sport','وەرزشی'], ['Family','خێزانی'], ['Documentary','دۆکیومێنتاری'], ['History','مێژوویی'], ['War','جەنگ'], ['Western','وێستەرن']];
 const shelves = [{id:'popular', genre:'', title:'بەناوبانگەکان', subtitle:'فیلمەکانی سەر زارەکان'}, {id:'action', genre:'Action', title:'ئەکشن و سەرکێشی', subtitle:'بۆ دەمێکی پڕ لە هیجان'}, {id:'horror', genre:'Horror', title:'جیهانی ترس', subtitle:'بۆ ئەوانەی دڵێکی بوێریان هەیە'}];
-let shelfMovies = [];
+let shelfMovies = [], asianMovies = [];
+let asianState = {};
+const asianShelves = [{id:'korean', title:'درامای کۆری', subtitle:'زنجیرە کۆرییەکان'}, {id:'japanese', title:'سینەمای ژاپۆنی', subtitle:'فیلم لە ژاپۆن'}, {id:'chinese', title:'سینەمای چینی', subtitle:'فیلم لە چین، هۆنگ کۆنگ و تایوان'}];
 let discovery = [], discoveryQuery = '', discoveryGenre = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
@@ -58,6 +61,7 @@ function render() {
         </section>
         <div class="shelf-intro"><div><span class="overline">CURATED FOR YOU</span><h2>ئەمڕۆ چی دەبینین؟ <span>✳</span></h2><p>چیرۆکێکی نوێ چاوەڕێتە.</p></div><a href="#catalog">هەموو فیلمەکان ${icon('arrow-up-left')}</a></div>
         <div class="shelf-list">${shelves.map(shelf => `<section class="shelf" aria-labelledby="shelf-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="shelf-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-genre="${shelf.genre || 'all'}">هەمووی ${icon('chevron-left')}</button></div><div class="shelf-rail" id="shelf-${shelf.id}"><div class="shelf-loading">فیلمەکان بار دەکرێن...</div></div></section>`).join('')}</div>
+        <div class="asian-section" id="asian"><div class="shelf-intro asian-intro"><div><span class="overline">ASIAN CINEMA</span><h2>چیرۆکەکانی ئاسیا <span>✳</span></h2><p>دراما و فیلم، لە کۆریا تا ژاپۆن و چین.</p></div></div><p class="asian-notice">تەنها ئەو ناونیشانانە نیشان دەدرێن کە ژێرنووسی ئینگلیزییان لە سەرچاوەی ژێرنووس دۆزراوەتەوە؛ بەردەستبوونی پەخش و CC دەکرێت بگۆڕێت.</p>${asianShelves.map(shelf => `<section class="shelf" aria-labelledby="asian-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="asian-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-asian-more="${shelf.id}">زیاتر ${icon('chevron-left')}</button></div><div class="shelf-rail" id="asian-${shelf.id}"><div class="shelf-loading">گەڕان بۆ فیلم و ژێرنووس...</div></div><p class="asian-status" id="asian-status-${shelf.id}" role="status"></p></section>`).join('')}</div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">EXPLORE MOVIES</span><h2>بگەڕێ و بدۆزەرەوە <span>✳</span></h2><p>بەپێی دڵت فیلمێک هەڵبژێرە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="ناوی فیلمێک بگەڕێ..." autocomplete="off"></label></div>
           <div class="genre-label" id="genres"><span>بەپێی جۆر</span><span>جیهانێک بۆ دۆزینەوە</span></div>
@@ -86,6 +90,8 @@ function render() {
   }
   loadDiscovery('', 1);
   loadShelves();
+  asianMovies = []; asianState = {};
+  asianShelves.forEach(shelf => loadAsian(shelf.id));
   if (Capacitor.isNativePlatform()) checkForUpdate(false);
 }
 function catalogCards(items) {
@@ -106,6 +112,47 @@ async function loadShelves() {
       if (rail.isConnected) rail.innerHTML = '<p class="shelf-loading">فیلمەکان بار نەبوون؛ ئینتەرنێت بپشکنە.</p>';
     }
   }));
+}
+async function loadAsian(region) {
+  const rail = document.querySelector(`#asian-${region}`);
+  const status = document.querySelector(`#asian-status-${region}`);
+  const button = document.querySelector(`[data-asian-more="${region}"]`);
+  if (!rail || !status || !button || !asianShelves.some(s => s.id === region)) return;
+  const state = asianState[region] ||= { page: 0, loading: false, seen: new Set(), count: 0 };
+  if (state.loading) return;
+  state.loading = true; button.disabled = true;
+  status.textContent = 'گەڕان و پشکنینی ژێرنووس...';
+  try {
+    const pages = Array.from({ length: 8 }, (_, i) => state.page + i + 1);
+    const batches = await Promise.all(pages.map(page => getCatalog(asianCatalogUrl(region, page))));
+    if (!rail.isConnected || asianState[region] !== state) return;
+    state.page += batches.length;
+    const candidates = batches.flatMap(data => asianCatalogResults(region, data)).filter(item => {
+      if (state.seen.has(item.id)) return false;
+      state.seen.add(item.id); return true;
+    });
+    const verified = new Array(candidates.length); let next = 0;
+    await Promise.all(Array.from({length: Math.min(3, candidates.length)}, async () => {
+      while (next < candidates.length) {
+        const i = next++;
+        try { if (hasEnglishSubtitle(await subtitleHttp(subtitleIndexUrl(candidates[i]), 'json'))) verified[i] = candidates[i]; } catch { /* Do not claim an unverified subtitle. */ }
+      }
+    }));
+    if (!rail.isConnected || asianState[region] !== state) return;
+    const items = verified.filter(Boolean);
+    asianMovies.push(...items); state.count += items.length;
+    if (state.page === batches.length) rail.innerHTML = '';
+    if (items.length) rail.insertAdjacentHTML('beforeend', catalogCards(items));
+    if (!state.count) rail.innerHTML = '<p class="shelf-loading">لە ئەم پەڕانەدا ژێرنووس نەدۆزرایەوە؛ زیاتر دابگرە.</p>';
+    else if (items.length) rail.querySelector('.shelf-loading')?.remove();
+    status.textContent = `${state.count.toLocaleString()} ناونیشان · ژێرنووسی ئینگلیزی دۆزراوەتەوە`;
+    paintIcons();
+  } catch {
+    if (rail.isConnected) status.textContent = 'بارکردن سەرکەوتوو نەبوو؛ دووبارە هەوڵ بدە.';
+  } finally { state.loading = false; if (button.isConnected) button.disabled = false; }
+}
+function embeddedUrl(movie) {
+  return movie.mediaKind === 'series' ? seriesEmbedUrl(movie.tmdbId, movie.season || 1, movie.episode || 1) : movieEmbedUrl(movie.tmdbId || movie.imdbId);
 }
 async function checkForUpdate(interactive = true) {
   if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('Updater')) {
@@ -154,7 +201,7 @@ async function openDonkey(url) {
     else window.open(url, '_blank', 'noopener,noreferrer');
   } catch { toast('ماڵپەڕەکە نەکرایەوە.'); }
 }
-function findMovie(id) { return [...library, ...movies, ...discovery, ...shelfMovies].find(m => m.id === id); }
+function findMovie(id) { return [...library, ...movies, ...discovery, ...shelfMovies, ...asianMovies].find(m => m.id === id); }
 async function getJson(url) {
   if (Capacitor.isNativePlatform()) {
     const response = await CapacitorHttp.get({ url, responseType: 'json' });
@@ -345,12 +392,13 @@ async function loadEmbeddedSource(movie, session) {
   status('گەڕان بۆ ژێرنووس بۆ وەرگێڕانی Google...');
   try {
     let text;
-    if (nativeMenuAvailable()) {
+    if (nativeMenuAvailable() && movie.mediaKind !== 'series') {
       try { text = await providerEnglishSubtitle(movie, valid); } catch { /* use an independent track when the player API is blocked */ }
     }
     if (!valid()) return;
     if (!text) text = await findMovieSubtitles(movie.imdbId, {
       json: url => subtitleHttp(url, 'json'), text: url => subtitleHttp(url, 'text'), isCurrent: valid,
+      ...(movie.mediaKind === 'series' ? { episode: { season: movie.season || 1, episode: movie.episode || 1 } } : {}),
     });
     if (!valid()) return;
     embeddedHasSource = true;
@@ -380,8 +428,8 @@ function openPlayer(movie) {
   playerSession++; subtitleRequest++; current = movie; originalCues = null; translations = {};
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
-    const url = movieEmbedUrl(movie.tmdbId || movie.imdbId);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div><p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی ئینگلیزی<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTTی ئینگلیزی بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
+    const url = embeddedUrl(movie);
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div>${movie.mediaKind === 'series' ? `<div class="episode-controls"><label>وەرز<input id="episode-season" type="number" min="1" max="999" value="${movie.season || 1}"></label><label>ئەڵقە<input id="episode-number" type="number" min="1" max="9999" value="${movie.episode || 1}"></label><button class="ghost" type="button" data-action="play-episode">سەیرکردن</button></div>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><a class="text-button" href="${url}" target="_blank" rel="noopener noreferrer">کردنەوە لە پەڕەیەکی تر ↗</a></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی ئینگلیزی<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTTی ئینگلیزی بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
@@ -474,6 +522,13 @@ app.addEventListener('click', e => {
   const action = e.target.closest('[data-action]')?.dataset.action;
   const timing = e.target.closest('[data-subtitle-offset]');
   if (timing && embeddedSubtitles) { embeddedOffset = Math.max(-120, Math.min(120, embeddedOffset + Number(timing.dataset.subtitleOffset))); embeddedSubtitles.setOffset(embeddedOffset); document.querySelector('#subtitle-offset').textContent = `${embeddedOffset > 0 ? '+' : ''}${embeddedOffset}s`; }
+  const asianMore = e.target.closest('[data-asian-more]');
+  if (asianMore) loadAsian(asianMore.dataset.asianMore);
+  if (action === 'play-episode' && current?.mediaKind === 'series') {
+    const season = Number(document.querySelector('#episode-season').value), episode = Number(document.querySelector('#episode-number').value);
+    if (!Number.isInteger(season) || season < 1 || season > 999 || !Number.isInteger(episode) || episode < 1 || episode > 9999) toast('وەرز و ئەڵقەیەکی دروست هەڵبژێرە.');
+    else { const nextMovie = { ...current, season, episode }; closePlayer(); openPlayer(nextMovie); }
+  }
   const genre = e.target.closest('[data-genre]');
   if (genre) {
     discoverySeq++; clearTimeout(discoveryTimer);
@@ -485,7 +540,7 @@ app.addEventListener('click', e => {
     updateGenreButtons(); drawCatalog(); loadDiscovery('', 1);
   }
   if (action === 'retry-subtitles') { if (nativeMenuAvailable() && embeddedMenuSource) { const id = ++embeddedSourceRequest; translateForPlayerMenu(embeddedMenuSource, playerSession, id); } else if (embeddedHasSource) embeddedSubtitles?.retry(); else if (current) loadEmbeddedSource(current, playerSession); }
-  if (action === 'enable-menu-subtitle' && embeddedMenuToken && current) { const frame = document.querySelector('#player-modal iframe'); if (frame) { startEmbeddedPlayer(frame, playerSession); frame.src = withSubtitleTrack(movieEmbedUrl(current.tmdbId || current.imdbId), embeddedMenuToken, embeddedTime); document.querySelector('#embedded-subtitle-status').textContent = 'سۆرانی لە لیستی CCی پلەیەرەکەیە.'; document.querySelectorAll('[data-action="enable-menu-subtitle"]').forEach(button => button.classList.add('hidden')); } }
+  if (action === 'enable-menu-subtitle' && embeddedMenuToken && current) { const frame = document.querySelector('#player-modal iframe'); if (frame) { startEmbeddedPlayer(frame, playerSession); frame.src = withSubtitleTrack(embeddedUrl(current), embeddedMenuToken, embeddedTime); document.querySelector('#embedded-subtitle-status').textContent = 'سۆرانی لە لیستی CCی پلەیەرەکەیە.'; document.querySelectorAll('[data-action="enable-menu-subtitle"]').forEach(button => button.classList.add('hidden')); } }
   if (action === 'subtitle-fullscreen') document.querySelector('#player-modal')?.classList.add('dimo-fullscreen');
   if (action === 'exit-subtitle-fullscreen') document.querySelector('#player-modal')?.classList.remove('dimo-fullscreen');
   if (action === 'retry-player') {
