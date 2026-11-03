@@ -18,4 +18,4 @@ try {
  const checked=await sorani.getAttribute('aria-checked');
  if(checked!=='true') throw Error(`Sorani selection did not apply: ${checked}`);
  console.log('::notice title=Player caption selection::Opened the real CC menu and selected the Sorani subtitle option');
-} catch(e){console.log(`::error title=CC probe::${String(e.message).split('\n')[0]}`);process.exitCode=1;} finally{await browser.close();}
+} catch(e){console.log(`::error title=CC probe::${String(e.message).replace(/\n/g,' | ').slice(0,1200)}`);process.exitCode=1;} finally{await browser.close();}
