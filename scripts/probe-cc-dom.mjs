@@ -10,9 +10,8 @@ try {
  const f=p.frameLocator('iframe'); await f.locator('video').waitFor({timeout:40000}); await p.waitForTimeout(8000);
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
  const data=await frame.evaluate(()=>({
-  text:document.body.textContent.slice(0,3000),
-  buttons:Array.from(document.querySelectorAll('button')).map(b=>({txt:b.innerText,aria:b.getAttribute('aria-label'),html:b.outerHTML.slice(0,650)})).slice(0,24),
-  sorani:Array.from(document.querySelectorAll('*')).filter(e=>e.children.length===0&&e.textContent.includes('کوردی سۆرانی')).map(e=>e.outerHTML.slice(0,600)).slice(0,8)
+  cc:Array.from(document.querySelectorAll('button')).filter(e=>e.outerHTML.toLowerCase().includes('subtitle')||e.outerHTML.toLowerCase().includes('caption')).map(e=>e.outerHTML.slice(0,1400)).slice(0,12),
+  sorani:Array.from(document.querySelectorAll('*')).filter(e=>e.children.length===0&&e.textContent.trim()==='کوردی سۆرانی').map(e=>e.parentElement?.outerHTML.slice(0,1800)).slice(0,6)
  }));
  console.log(`::notice title=CC DOM::${JSON.stringify(data)}`);
 } catch(e){console.log(`::error title=CC probe::${String(e.message).split('\n')[0]}`);process.exitCode=1;} finally{await browser.close();}
