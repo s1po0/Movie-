@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   debug-apk:
@@ -37,6 +37,14 @@ jobs:
           name: dimo-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publish Perde debug APK
+        if: contains(github.event.head_commit.message, '[publish-perde]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/Perde-debug.apk
+          gh release upload perde-debug-v11 /tmp/Perde-debug.apk --clobber
+          gh release edit perde-debug-v11 --draft=false
       - name: Check live movie search and playback
         if: contains(github.event.head_commit.message, '[live-check]')
         run: |
