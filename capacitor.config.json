@@ -1,6 +1,6 @@
 {
   "appId": "app.dimo.movies",
-  "appName": "پەردە",
+  "appName": "ڕووناک",
   "webDir": "dist",
   "android": { "allowMixedContent": false }
 }

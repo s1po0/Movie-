@@ -21,14 +21,20 @@ try {
     if (await page.locator('.catalog-filters [data-genre="Horror"]').getAttribute('aria-pressed') !== 'true') throw Error('Genre selection did not update');
     await page.locator('#catalog-search').fill('Matrix');
     await page.locator('#catalog-cards').getByText('The Matrix').first().waitFor();
-    await page.locator('[data-action="add"]').first().click();
+    if (await page.locator('#library').count()) throw Error('The removed library section is still visible');
+    await page.locator('.top-add[data-action="library"]').click();
+    await page.locator('#modal [data-action="add"]').click();
     await page.locator('#add-form').waitFor();
+    await page.locator('#add-form [name="title"]').fill('My saved movie');
+    await page.locator('#add-form [name="url"]').fill('https://example.com/movie.mp4');
+    await page.locator('#add-form button[type="submit"]').click();
+    await page.locator('#modal .saved-title').getByText('My saved movie').waitFor();
     await page.locator('#modal [data-action="close"]').click();
     await page.locator('[data-play="cinebloom-155"]').first().click();
     await page.locator('#player-modal iframe').waitFor();
     await page.locator('#player-modal [data-action="close-player"]').click();
     if (errors.length) throw Error(errors.join('; '));
-    console.log(`::notice title=UI smoke test::${viewport.width}px: shelves, genres, search, library dialog and player passed`);
+    console.log(`::notice title=UI smoke test::${viewport.width}px: shelves, genres, search, saved links and player passed`);
     await page.close();
   }
 } catch (error) {
