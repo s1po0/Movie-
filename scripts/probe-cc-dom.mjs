@@ -2,7 +2,7 @@ import { chromium } from 'playwright-core';
 import { withSubtitleTrack, subtitleTrackUrl } from '../src/menu-subtitles.js';
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
 const p=await browser.newPage({viewport:{width:390,height:844}}); const token='0123456789abcdef0123456789abcdef';
-p.on('console', msg => { if (msg.text().startsWith('DIMO_AD_ORIGIN')) console.log('::notice title=Overlay origin::' + msg.text().slice(0,1800)); });
+p.on('console', msg => { if (msg.text().startsWith('DIMO_AD_ORIGIN')) console.log('::notice title=Overlay origin::' + msg.text().replace(/\n/g,' | ').slice(0,1800)); });
 await p.addInitScript(() => {
  const descriptor=Object.getOwnPropertyDescriptor(Element.prototype,'id');
  Object.defineProperty(Element.prototype,'id',{...descriptor,set(value){if(value==='dontfoid') console.log('DIMO_AD_ORIGIN id '+new Error().stack); return descriptor.set.call(this,value);}});
