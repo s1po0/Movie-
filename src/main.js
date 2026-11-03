@@ -240,19 +240,19 @@ async function providerEnglishSubtitle(movie, valid) {
   return text;
 }
 async function googleTranslateForMenu(text, target) {
-  const url = translationUrl(text, target);
-  // WebView requests use a browser User-Agent. Google's unofficial endpoint
-  // often rate-limits Android's default Java HTTP client more aggressively.
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (response.status === 429) throw new Error('HTTP 429');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return translatedText(await response.json());
-  } catch (error) {
-    if (error.message === 'HTTP 429') throw error;
-    return translatedText(await subtitleHttp(url, 'json'));
-  } finally { clearTimeout(timer); }
+  const base = translationUrl(text, target);
+  let lastError;
+  // Android's default HTTP user agent is rejected by Google's unofficial web
+  // endpoint on some networks; a neutral user agent avoids that rejection.
+  for (const client of ['gtx', 'at']) {
+    const url = new URL(base); url.searchParams.set('client', client);
+    try {
+      const response = await CapacitorHttp.get({ url: url.href, responseType: 'json', headers: { 'User-Agent': 'node' }, connectTimeout: 12000, readTimeout: 12000 });
+      if (response.status < 200 || response.status >= 300) throw new Error(`HTTP ${response.status}`);
+      return translatedText(response.data);
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error('Translation unavailable');
 }
 async function translateForPlayerMenu(text, session, requestId) {
   const valid = () => session === playerSession && requestId === embeddedSourceRequest && embeddedSubtitles;
