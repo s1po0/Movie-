@@ -60,7 +60,7 @@ jobs:
       - run: npm ci && npm install --no-save --no-package-lock playwright-core && npm run build
       - run: |
           ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/dimo-preview.log 2>&1 &
-          node scripts/menu-probe.mjs
+          node scripts/probe-cc-dom.mjs
   android-menu-check:
     if: contains(github.event.head_commit.message, '[android-menu-check]')
     runs-on: ubuntu-24.04
