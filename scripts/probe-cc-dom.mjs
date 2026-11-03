@@ -9,6 +9,6 @@ try {
  await p.locator('iframe').evaluate((el,src)=>el.src=src,withSubtitleTrack('https://vidlink.pro/movie/155',token));
  const f=p.frameLocator('iframe'); await f.locator('video').waitFor({timeout:40000}); await p.waitForTimeout(8000);
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
- const data=await frame.evaluate(()=>({buttons:Array.from(document.querySelectorAll('button')).slice(0,15).map(e=>({aria:e.getAttribute('aria-label'),title:e.title,tip:e.getAttribute('data-media-tooltip'),text:e.innerText,html:e.outerHTML.slice(0,1200)}))}));
+ const data=await frame.evaluate(()=>({buttons:Array.from(document.querySelectorAll('button')).slice(0,15).map(e=>({aria:e.getAttribute('aria-label'),title:e.title,tip:e.getAttribute('data-media-tooltip'),text:e.innerText,role:e.getAttribute('role'),id:e.id,cls:e.className,markup:e.outerHTML.slice(0,250)}))}));
  console.log(`::notice title=CC DOM::${JSON.stringify(data)}`);
 } catch(e){console.log(`::error title=CC probe::${String(e.message).split('\n')[0]}`);process.exitCode=1;} finally{await browser.close();}
