@@ -50,9 +50,11 @@ try {
   const fetched = await evaluate(`fetch(${JSON.stringify(trackUrl)}).then(async r => ({status:r.status,text:await r.text()}))`, contextId);
   if (fetched.status !== 200 || !fetched.text.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(fetched.text)) throw Error(`Android translated subtitle interception failed: HTTP ${fetched.status}`);
   try {
-    await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('button')).some(b => /Captions.*کوردی سۆرانی/.test(b.innerText))", contextId); }, 60000);
+    await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی')", contextId); }, 60000);
+    await evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).find(e => e.textContent.trim() === 'کوردی سۆرانی').click()", contextId);
+    await wait(async function soraniSelected() { return evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی' && e.getAttribute('aria-checked') === 'true')", contextId); }, 10000);
   } catch (error) {
-    const diagnostic = await evaluate("JSON.stringify({text: document.body?.innerText?.slice(0,400), buttons: Array.from(document.querySelectorAll('button')).map(b=>b.innerText).filter(Boolean).slice(0,30)})", contextId).catch(() => 'frame context unavailable');
+    const diagnostic = await evaluate("JSON.stringify({text: document.body?.innerText?.slice(0,400), buttons: Array.from(document.querySelectorAll('button')).map(b=>b.innerText).filter(Boolean).slice(0,30), options: Array.from(document.querySelectorAll('[role=menuitemradio]')).map(e => e.textContent.trim()).slice(0,40)})", contextId).catch(() => 'frame context unavailable');
     console.log(`::notice title=Player menu diagnostic::${diagnostic}`);
     throw error;
   }
