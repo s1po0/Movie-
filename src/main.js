@@ -129,7 +129,12 @@ async function mapLimited(items, limit, task) {
 async function loadKoreanSearch(query, seq) {
   try {
     const data = await getCatalog(koreanDramaSearchUrl(query));
-    const candidates = asianCatalogResults('korean', data).slice(0, 20);
+    // Search responses often omit country, genres and TMDB IDs; enrich each
+    // result from Cinemeta before applying the same shelf validation.
+    const ids = [...new Set((data.metas || []).map(item => item?.id).filter(id => /^tt\d{5,12}$/.test(id || '')))].slice(0, 20);
+    const metadata = await mapLimited(ids, 3, id => subtitleHttp(asianMetadataUrl('korean', id), 'json').catch(() => null));
+    if (seq !== discoverySeq) return;
+    const candidates = metadata.flatMap(data => data?.meta ? asianCatalogResults('korean', {metas:[data.meta]}) : []);
     const verified = new Array(candidates.length); let next = 0;
     await Promise.all(Array.from({length: Math.min(3, candidates.length)}, async () => {
       while (next < candidates.length && seq === discoverySeq) {

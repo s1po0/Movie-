@@ -8,6 +8,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     await page.route('https://v3-cinemeta.strem.io/**', route => {
       const url = route.request().url();
+      if (url.includes('/meta/series/tt10850932.json')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({meta:{id:'tt10850932',type:'series',name:'Korean drama',country:'South Korea',genres:['Drama'],moviedb_id:94796}})}); return; }
       const genre = /genre=([^&.]+)/.exec(url)?.[1] || 'Popular';
       const names = url.includes('search=') ? ['The Matrix'] : [`${genre} One`, `${genre} Two`];
       if (url.includes('/catalog/series/')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({metas:[{id:'tt10850932',type:'series',name:'Korean drama',country:'South Korea',genres:['Drama'],moviedb_id:94796}]})}); return; }
