@@ -9,6 +9,13 @@ try {
  await p.locator('iframe').evaluate((el,src)=>el.src=src,withSubtitleTrack('https://vidlink.pro/movie/155',token));
  const f=p.frameLocator('iframe'); await f.locator('video').waitFor({timeout:40000}); await p.waitForTimeout(8000);
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
- const data=await frame.evaluate(()=>({buttons:Array.from(document.querySelectorAll('button')).slice(0,15).map(e=>({aria:e.getAttribute('aria-label'),title:e.title,tip:e.getAttribute('data-media-tooltip'),text:e.innerText,role:e.getAttribute('role'),id:e.id,cls:e.className,markup:e.outerHTML.slice(0,250)}))}));
- console.log(`::notice title=CC DOM::${JSON.stringify(data)}`);
+ await f.locator('#media-menu-button-1').click({timeout:10000});
+ const english=f.locator('[role="menuitemradio"]').filter({hasText:'English'}).first();
+ await english.click({timeout:10000});
+ await f.locator('#media-menu-button-1').click({timeout:10000});
+ const sorani=f.locator('[role="menuitemradio"]').filter({hasText:'کوردی سۆرانی'}).first();
+ await sorani.click({timeout:10000});
+ const checked=await sorani.getAttribute('aria-checked');
+ if(checked!=='true') throw Error(`Sorani selection did not apply: ${checked}`);
+ console.log('::notice title=Player caption selection::Opened the real CC menu and selected the Sorani subtitle option');
 } catch(e){console.log(`::error title=CC probe::${String(e.message).split('\n')[0]}`);process.exitCode=1;} finally{await browser.close();}
