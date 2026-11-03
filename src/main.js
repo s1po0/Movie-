@@ -1,12 +1,12 @@
 import './style.css';
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
-import { createIcons, Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload } from 'lucide';
+import { createIcons, Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film } from 'lucide';
 import { parseSubtitles, toVtt } from './subtitles.js';
 import { translationGroups, translationUrl, translatedText, translateGroup } from './translate.js';
 import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
 import { metadataUrl, archiveFiles } from './archive.js';
-import { catalogUrl, mergeCatalogPage } from './cinemeta.js';
+import { catalogUrl, mergeCatalogPage, catalogResults } from './cinemeta.js';
 import { isDonkeyPage } from './donkey.js';
 import { movieEmbedUrl } from './vidlink-embed.js';
 import { createCatalogCache } from './catalog-cache.js';
@@ -19,13 +19,16 @@ const DonkeyPlayer = registerPlugin('DonkeyPlayer');
 const MenuSubtitle = registerPlugin('MenuSubtitle');
 const nativeMenuAvailable = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('MenuSubtitle');
 const app = document.querySelector('#app');
-const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload };
+const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film };
 const getCatalog = createCatalogCache(getJson);
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {}, playerTimer;
 let embeddedSubtitles = null, embeddedSourceRequest = 0, embeddedHasSource = false, embeddedOffset = 0;
 let embeddedMenuSource = null, embeddedMenuToken = null, embeddedTime = 0;
-let discovery = [], discoveryQuery = '', discoveryGenre = 'Horror', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
+const genres = [['all','هەمووی'], ['Action','ئەکشن'], ['Adventure','سەرکێشی'], ['Comedy','کۆمیدی'], ['Drama','دراما'], ['Horror','ترسناک'], ['Thriller','هیجان'], ['Crime','تاوان'], ['Mystery','نهێنی'], ['Romance','ڕۆمانسی'], ['Sci-Fi','زانستی خەیاڵی'], ['Fantasy','خەیاڵی'], ['Animation','ئەنیمەیشن'], ['Biography','ژیاننامە'], ['Sport','وەرزشی'], ['Family','خێزانی'], ['Documentary','دۆکیومێنتاری'], ['History','مێژوویی'], ['War','جەنگ'], ['Western','وێستەرن']];
+const shelves = [{id:'popular', genre:'', title:'بەناوبانگەکان', subtitle:'فیلمەکانی سەر زارەکان'}, {id:'action', genre:'Action', title:'ئەکشن و سەرکێشی', subtitle:'بۆ دەمێکی پڕ لە هیجان'}, {id:'horror', genre:'Horror', title:'جیهانی ترس', subtitle:'بۆ ئەوانەی دڵێکی بوێریان هەیە'}];
+let shelfMovies = [];
+let discovery = [], discoveryQuery = '', discoveryGenre = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function readLibrary() { try { const value = JSON.parse(localStorage.getItem('dimo-library') || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } }
 function saveLibrary() { localStorage.setItem('dimo-library', JSON.stringify(library)); }
@@ -36,34 +39,38 @@ function render() {
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
-        <a href="#home" class="brand" aria-label="DIMO"><span class="brand-mark">${icon('play')}</span><span>DIMO<span class="brand-dot">.</span></span></a>
-        <nav><a class="nav-active" href="#home">سەرەتا</a><a href="#catalog">فیلمەکان</a><a href="#library">کتێبخانە</a></nav>
-        <button class="top-add" data-action="add">${icon('plus')} <span>زیادکردنی فیلم</span></button>
+        <a href="#home" class="brand" aria-label="پەردە، سەرەتا"><span class="brand-mark">${icon('play')}</span><span class="brand-word">پەردە<small>PERDE</small></span></a>
+        <nav aria-label="گەڕان"><a class="nav-active" href="#home">سەرەتا</a><a href="#catalog">فیلمەکان</a><a href="#genres">جۆرەکان</a><a href="#library">لیستەکەم</a></nav>
+        <div class="header-actions"><button class="header-search" data-action="focus-search" aria-label="گەڕان">${icon('search')}</button><button class="top-add" data-action="add">${icon('plus')} <span>لیستەکەم</span></button></div>
       </header>
       <main id="home">
-        <section class="hero">
+        <section class="hero" aria-label="پێشوازی">
           <div class="hero-shade"></div><div class="hero-content">
-            <div class="eyebrow"><span></span> جیهانێک چیرۆک، لە یەک شوێن</div>
-            <h1>کاتی ئەوەیە<br><em>چیرۆکێکی نوێ ببینیت.</em></h1>
-            <p>فیلم و دراماکانت کۆ بکەرەوە، سەیریان بکە و ژێرنووسەکە بە زمانی دڵخوازت بگۆڕە.</p>
-            <div class="hero-actions"><button class="primary" data-play="cinebloom-155">${icon('play')} سەیرکردنی <span dir="ltr">The Dark Knight</span></button><button class="ghost" data-action="add">${icon('plus')} فیلم زیاد بکە</button></div>
-          </div><div class="hero-index"><span>01</span><div></div> YOUR CINEMA, YOUR WAY</div>
+            <div class="eyebrow"><span></span> سینەمای تۆ، چیرۆکی تۆ</div>
+            <h1>هەر شەوێک،<br><em>چیرۆکێکی نوێ.</em></h1>
+            <p>لە چیاکانمانەوە بۆ هەموو جیهان؛ فیلمێک هەڵبژێرە و خۆت بسپێرە بە چیرۆکەکە.</p>
+            <div class="hero-actions"><button class="primary" data-play="cinebloom-155">${icon('play')} سەیری <span dir="ltr">The Dark Knight</span></button><a class="ghost" href="#catalog">${icon('film')} دۆزینەوەی فیلم</a></div>
+            <div class="hero-caption"><span>✦</span> شوێنێک بۆ هەموو چیرۆکەکانت</div>
+          </div><div class="hero-index"><span>PERDE</span><div></div> STORIES LIVE HERE</div>
         </section>
-        <div class="feature-strip"><div>${icon('clapperboard')} <span>فیلم و دراما</span></div><div>${icon('captions')} <span>ژێرنووسی دڵخواز</span></div><div>${icon('languages')} <span>وەرگێڕان بۆ چەند زمانێک</span></div><div>${icon('smartphone')} <span>لە مۆبایلەکەتدا</span></div></div>
+        <div class="shelf-intro"><div><span class="overline">YOUR CINEMA, YOUR STORIES</span><h2>ئەمڕۆ چی دەبینین؟ <span>✳</span></h2><p>چیرۆکێکی نوێ چاوەڕێتە.</p></div><a href="#catalog">هەموو فیلمەکان ${icon('arrow-up-left')}</a></div>
+        <div class="shelf-list">${shelves.map(shelf => `<section class="shelf" aria-labelledby="shelf-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="shelf-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-genre="${shelf.genre || 'all'}">هەمووی ${icon('chevron-left')}</button></div><div class="shelf-rail" id="shelf-${shelf.id}"><div class="shelf-loading">فیلمەکان بار دەکرێن...</div></div></section>`).join('')}</div>
         <section class="catalog" id="catalog">
-          <div class="section-head catalog-head"><div><span class="overline">DISCOVER MOVIES</span><h2>فیلم و دراماکان <span>✦</span></h2><p>فیلم هەڵبژێرە و ڕاستەوخۆ لە ناو بەرنامەکە سەیری بکە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="گەڕان بە ناوی فیلم..." autocomplete="off"></label></div>
-          <div class="catalog-filters" role="group" aria-label="جۆری فیلم"><button type="button" data-genre="Horror" aria-pressed="${discoveryGenre === 'Horror'}">فیلمە ترسناکەکان</button><button type="button" data-genre="all" aria-pressed="${discoveryGenre === ''}">هەموو فیلمەکان</button></div>
-          <p class="catalog-notice">بۆ بینینی فیلمی زیاتر بچۆ خوارەوە. بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە و ئینتەرنێتەوە پەیوەستە.</p>
+          <div class="section-head catalog-head"><div><span class="overline">EXPLORE THE COLLECTION</span><h2>بگەڕێ و بدۆزەرەوە <span>✳</span></h2><p>بەپێی دڵت فیلمێک هەڵبژێرە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="ناوی فیلمێک بگەڕێ..." autocomplete="off"></label></div>
+          <div class="genre-label" id="genres"><span>بەپێی جۆر</span><span>جیهانێک بۆ دۆزینەوە</span></div>
+          <div class="catalog-filters" role="group" aria-label="جۆری فیلم">${genres.map(([value, label]) => `<button type="button" data-genre="${value}" aria-pressed="${value === (discoveryGenre || 'all')}">${label}</button>`).join('')}</div>
+          <p class="catalog-notice">بۆ فیلمی زیاتر بچۆ خوارەوە · بەردەستبوونی پەخش و ژێرنووس بە سەرچاوەکە پەیوەستە.</p>
           <div id="catalog-cards" class="catalog-cards">${catalogCards(localCatalogMovies(''))}</div>
           <p id="catalog-empty" class="catalog-empty hidden">هیچ فیلمێک بەم ناوە نەدۆزرایەوە.</p><p id="discovery-status" class="form-hint" role="status"></p><button id="more-movies" class="ghost hidden" type="button">فیلمی زیاتر</button>
         </section>
         <section class="library" id="library">
           <div class="section-head"><div><span class="overline">YOUR COLLECTION</span><h2>کتێبخانەی تۆ <span>✦</span></h2><p>لینکی فیلمەکانی خۆت لێرە زیاد بکە.</p></div><button class="text-button" data-action="add">زیادکردنی فیلم ${icon('arrow-up-left')}</button></div>
-          <div class="cards">${cards.map((movie, i) => `<article class="movie-card"><button class="poster ${escapeHtml(movie.color || ['gold','plum','blue'][i%3])}" ${movie.poster ? `style="background-image:linear-gradient(0deg, #101510a8, transparent 55%),url('${escapeHtml(movie.poster)}');background-size:cover;background-position:center"` : ''} data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><span class="poster-label">${movie.credit ? 'FREE MOVIE' : 'MY MOVIE'}</span><span class="poster-art">${icon('clapperboard')}</span><span class="poster-play">${icon('play')}</span><span class="poster-bottom">DIMO <span>✦</span></span></button><div class="card-info"><div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p>${escapeHtml(isDonkeyPage(movie.url) ? 'فیلمی من' : movie.type || 'فیلمی من')} <span>•</span> STREAMING</p></div>${movie.credit ? '' : `<button class="delete" data-delete="${escapeHtml(movie.id)}" aria-label="سڕینەوەی ${escapeHtml(movie.title)}">${icon('trash-2')}</button>`}</div></article>`).join('')}<button class="add-card" data-action="add"><span>${icon('plus')}</span><strong>فیلمێکی نوێ زیاد بکە</strong><small>لینکی خۆت دابنێ</small></button></div>
+          <div class="cards">${cards.map((movie, i) => `<article class="movie-card"><button class="poster ${escapeHtml(movie.color || ['gold','plum','blue'][i%3])}" ${movie.poster ? `style="background-image:linear-gradient(0deg, #101510a8, transparent 55%),url('${escapeHtml(movie.poster)}');background-size:cover;background-position:center"` : ''} data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><span class="poster-label">${movie.credit ? 'FREE MOVIE' : 'MY MOVIE'}</span><span class="poster-art">${icon('clapperboard')}</span><span class="poster-play">${icon('play')}</span><span class="poster-bottom">PERDE <span>✦</span></span></button><div class="card-info"><div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p>${escapeHtml(isDonkeyPage(movie.url) ? 'فیلمی من' : movie.type || 'فیلمی من')} <span>•</span> STREAMING</p></div>${movie.credit ? '' : `<button class="delete" data-delete="${escapeHtml(movie.id)}" aria-label="سڕینەوەی ${escapeHtml(movie.title)}">${icon('trash-2')}</button>`}</div></article>`).join('')}<button class="add-card" data-action="add"><span>${icon('plus')}</span><strong>فیلمێکی نوێ زیاد بکە</strong><small>لینکی خۆت دابنێ</small></button></div>
         </section>
         <section class="note"><div class="note-icon">${icon('sparkles')}</div><div><strong>هەر چیرۆکێک، بە زمانی خۆت.</strong><p>ژێرنووسێک بار بکە و بە Google Translate وەری بگێڕە بۆ زمانی دڵخوازت.</p></div><button class="text-button" data-action="help">چۆن کار دەکات؟ ${icon('arrow-up-left')}</button></section>
       </main>
-      <footer><span class="footer-brand">DIMO<span>.</span></span><span>دروستکراوە بۆ خۆشەویستانی فیلم <b>✦</b></span><span>YOUR STORIES, YOUR WAY</span></footer>
+      <footer><span class="footer-brand">پەردە <span>✳</span></span><span>بۆ خۆشەویستانی چیرۆک و سینەما</span><span>STORIES LIVE HERE</span></footer>
+      <div class="mobile-nav" aria-label="گەڕانی مۆبایل"><a href="#home">${icon('house')}<span>سەرەتا</span></a><a href="#catalog">${icon('search')}<span>گەڕان</span></a><a href="#genres">${icon('film')}<span>جۆرەکان</span></a><a href="#library">${icon('bookmark')}<span>لیستەکەم</span></a></div>
     </div>
     <div class="overlay hidden" id="modal" role="dialog" aria-modal="true"></div>
     <div class="overlay hidden player-overlay" id="player-modal" role="dialog" aria-modal="true"></div>
@@ -80,14 +87,31 @@ function render() {
     discoveryObserver.observe(document.querySelector('#more-movies'));
   }
   loadDiscovery('', 1);
+  loadShelves();
 }
 function catalogCards(items) {
   return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy" decoding="async"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
 }
+async function loadShelves() {
+  shelfMovies = [];
+  await Promise.all(shelves.map(async shelf => {
+    const rail = document.querySelector(`#shelf-${shelf.id}`);
+    if (!rail) return;
+    try {
+      const items = catalogResults(await getCatalog(catalogUrl('', 1, shelf.genre))).slice(0, 16);
+      if (!rail.isConnected) return;
+      shelfMovies.push(...items);
+      rail.innerHTML = items.length ? catalogCards(items) : '<p class="shelf-loading">فیلمێک نەدۆزرایەوە.</p>';
+      paintIcons();
+    } catch {
+      if (rail.isConnected) rail.innerHTML = '<p class="shelf-loading">فیلمەکان بار نەبوون؛ ئینتەرنێت بپشکنە.</p>';
+    }
+  }));
+}
 function openModal(content) { const m = document.querySelector('#modal'); m.innerHTML = `<div class="dialog">${content}</div>`; m.classList.remove('hidden'); paintIcons(); }
 function closeModal() { document.querySelector('#modal').classList.add('hidden'); }
 function addDialog() {
-  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری DIMO، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی ماڵپەڕ لە پلەیەری ماڵپەڕەکە دەکرێتەوە؛ ژێرنووسی DIMO بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">YOUR COLLECTION</span><h2>فیلمێک زیاد بکە</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">لینکی فیلم یان ماڵپەڕی فیلمێک دابنێ.</p><form id="add-form"><label>ناوی فیلم <input required name="title" maxlength="100" placeholder="ناوی فیلمەکە بنووسە"></label><label>لینکی ستریم <input required name="url" type="url" dir="ltr" placeholder="https://example.com/movie.m3u8"></label><label>لینکی ژێرنووس <span class="optional">ئیختیاری · SRT / VTT</span><input name="subtitle" type="url" dir="ltr" placeholder="https://example.com/subtitle.srt"></label><p class="form-hint">بۆ پلەیەری پەردە، لینکەکە دەبێت HTTPS و ڕاستەوخۆ بۆ MP4، WebM یان HLS بێت. لینکی ماڵپەڕ لە پلەیەری ماڵپەڕەکە دەکرێتەوە؛ ژێرنووسی DIMO بۆی کار ناکات.</p><button class="primary full" type="submit">${icon('plus')} زیادکردن بۆ کتێبخانە</button></form>`);
 }
 function helpDialog() { openModal(`<div class="dialog-header"><div><span class="overline">HOW IT WORKS</span><h2>چۆن کار دەکات؟</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><div class="help-list"><p><b>١</b><span>لینکی ڕاستەوخۆی ستریمەکەت زیاد بکە و فیلمەکە بکەرەوە.</span></p><p><b>٢</b><span>فایلی ژێرنووسی SRT یان VTT هەڵبژێرە، یان لینکی ژێرنووس دابنێ.</span></p><p><b>٣</b><span>زمان هەڵبژێرە و دوگمەی وەرگێڕان دابگرە؛ پێویست بە کلیل یان پارەدان نییە.</span></p></div><p class="form-hint">ژێرنووسەکان بۆ Google دەنێردرێن. خزمەتگوزارییە بەخۆڕاییەکە فەرمی نییە؛ لەوانەیە سنووردار بکرێت یان بوەستێت. هەندێک ستریم یان زمان لەوانەیە پشتگیری نەکرێت.</p>`); }
 function toast(message) { const el = document.querySelector('.toast'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 4500); }
@@ -99,7 +123,7 @@ async function openDonkey(url) {
     else window.open(url, '_blank', 'noopener,noreferrer');
   } catch { toast('ماڵپەڕەکە نەکرایەوە.'); }
 }
-function findMovie(id) { return [...library, ...movies, ...discovery].find(m => m.id === id); }
+function findMovie(id) { return [...library, ...movies, ...discovery, ...shelfMovies].find(m => m.id === id); }
 async function getJson(url) {
   if (Capacitor.isNativePlatform()) {
     const response = await CapacitorHttp.get({ url, responseType: 'json' });
@@ -111,10 +135,10 @@ async function getJson(url) {
   return response.json();
 }
 function localCatalogMovies(query) {
-  return searchMovies(query).filter(movie => !movie.credit && (discoveryGenre !== 'Horror' || movie.type?.includes('ترسناک')));
+  return searchMovies(query).filter(movie => !movie.credit && (!discoveryGenre || (discoveryGenre === 'Horror' && movie.type?.includes('ترسناک'))));
 }
 function updateGenreButtons() {
-  document.querySelectorAll('[data-genre]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.genre === (discoveryGenre || 'all'))));
+  document.querySelectorAll('.catalog-filters [data-genre]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.genre === (discoveryGenre || 'all'))));
 }
 function drawCatalog(appendFrom = null) {
   const local = localCatalogMovies(discoveryQuery);
@@ -417,7 +441,8 @@ app.addEventListener('click', e => {
   const genre = e.target.closest('[data-genre]');
   if (genre) {
     discoverySeq++; clearTimeout(discoveryTimer);
-    discoveryGenre = genre.dataset.genre === 'Horror' ? 'Horror' : '';
+    discoveryGenre = genres.some(([value]) => value === genre.dataset.genre) && genre.dataset.genre !== 'all' ? genre.dataset.genre : '';
+    if (genre.classList.contains('shelf-more')) document.querySelector('#catalog').scrollIntoView({ behavior: 'smooth' });
     discovery = []; discoveryPage = 0; discoveryMore = false; discoveryLoading = false; discoveryAuto = true; discoveryQuery = '';
     document.querySelector('#catalog-search').value = '';
     document.querySelector('#more-movies').disabled = false;
@@ -431,6 +456,7 @@ app.addEventListener('click', e => {
     const frame = document.querySelector('#player-modal iframe');
     if (frame) { embeddedSubtitles?.setTime(0); startEmbeddedPlayer(frame, playerSession); frame.src = frame.src; }
   }
+  if (action === 'focus-search') { document.querySelector('#catalog').scrollIntoView({ behavior: 'smooth' }); document.querySelector('#catalog-search').focus({ preventScroll: true }); }
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
   const play = e.target.closest('[data-play]'); if (play) { const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
   const del = e.target.closest('[data-delete]'); if (del && confirm('ئەم فیلمە لە کتێبخانە بسڕدرێتەوە؟')) { library = library.filter(m => m.id !== del.dataset.delete); saveLibrary(); render(); toast('فیلمەکە سڕایەوە.'); }

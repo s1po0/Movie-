@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">DIMO</string>
-    <string name="title_activity_main">DIMO</string>
+    <string name="app_name">پەردە</string>
+    <string name="title_activity_main">پەردە</string>
     <string name="package_name">app.dimo.movies</string>
     <string name="custom_url_scheme">app.dimo.movies</string>
 </resources>

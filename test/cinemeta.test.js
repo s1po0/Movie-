@@ -7,6 +7,8 @@ test('builds movie search and popular catalog URLs safely', () => {
   assert.equal(catalogUrl('', 2), 'https://v3-cinemeta.strem.io/catalog/movie/top/skip=50.json');
   assert.equal(catalogUrl('', 1, 'Horror'), 'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Horror.json');
   assert.equal(catalogUrl('', 23, 'Horror'), 'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Horror&skip=1100.json');
+  assert.equal(catalogUrl('', 1, 'Action'), 'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Action.json');
+  assert.equal(catalogUrl('', 2, 'Sci-Fi'), 'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Sci-Fi&skip=50.json');
   assert.throws(() => catalogUrl('', 1, 'Horror&skip=200'));
   assert.equal(catalogUrl('  The Matrix & more  '), 'https://v3-cinemeta.strem.io/catalog/movie/top/search=The%20Matrix%20%26%20more.json');
   assert.throws(() => catalogUrl('', 0));
