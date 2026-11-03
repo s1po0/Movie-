@@ -2,6 +2,7 @@ package app.dimo.movies;
 
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Environment;
 import com.getcapacitor.JSObject;
@@ -14,10 +15,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class UpdaterPlugin extends Plugin {
     @PluginMethod
     public void getVersion(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("versionCode", BuildConfig.VERSION_CODE);
-        result.put("versionName", BuildConfig.VERSION_NAME);
-        call.resolve(result);
+        try {
+            PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            JSObject result = new JSObject();
+            result.put("versionCode", info.versionCode);
+            result.put("versionName", info.versionName);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Unable to read app version", error);
+        }
     }
 
     @PluginMethod
