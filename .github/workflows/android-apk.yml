@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   debug-apk:
@@ -48,14 +48,6 @@ jobs:
             grep -E -A 3 "error:|^FAILURE:|^\* What went wrong:|^\* Where:" /tmp/gradle-build.log | head -15 | while IFS= read -r line; do echo "::error::$line"; done
             exit 1
           }
-      - name: Publish Kurd Movie v16 APK
-        if: contains(github.event.head_commit.message, '[release-v16]')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/Kurd-Movie.apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/Nali.apk
-          gh release create nali-v16 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target "$GITHUB_SHA" --title "Kurd Movie v16" --prerelease --notes "Korean movies and dramas, Japanese and Chinese cinema discovery. Availability of streams and subtitles varies. This APK may not upgrade earlier installations unless signed with the same certificate."
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
