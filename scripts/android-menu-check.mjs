@@ -62,8 +62,11 @@ try {
       await send('Input.dispatchTouchEvent', {type:'touchStart',touchPoints:[{x,y}]});
       await send('Input.dispatchTouchEvent', {type:'touchEnd',touchPoints:[]});
     };
-    await tapInFrame('#media-menu-button-1');
+    const visible = () => evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی' && e.getBoundingClientRect().width > 0)", contextId);
+    if (!await visible()) await tapInFrame('#media-menu-button-1');
+    await wait(async function captionOptionsVisible() { return visible(); }, 10000);
     await evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).filter(e => e.textContent.trim() === 'کوردی سۆرانی').forEach(e => e.setAttribute('data-dimo-test', 'sorani'))", contextId);
+    await evaluate("Array.from(document.querySelectorAll('[data-dimo-test=sorani]')).find(e => e.getBoundingClientRect().width > 0)?.scrollIntoView({block:'nearest'})", contextId);
     await tapInFrame('[data-dimo-test=sorani]');
     await wait(async function soraniSelected() { return evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی' && e.getAttribute('aria-checked') === 'true')", contextId); }, 10000);
   } catch (error) {
