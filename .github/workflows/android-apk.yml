@@ -28,7 +28,7 @@ jobs:
         working-directory: android
         run: |
           ./gradlew --no-daemon assembleDebug > /tmp/gradle-build.log 2>&1 || {
-            tail -60 /tmp/gradle-build.log | while IFS= read -r line; do echo "::error::$line"; done
+            grep -E -A 3 "error:|^FAILURE:|^\* What went wrong:|^\* Where:" /tmp/gradle-build.log | head -15 | while IFS= read -r line; do echo "::error::$line"; done
             exit 1
           }
       - name: Upload APK
