@@ -12,7 +12,7 @@ try {
  await frame.evaluate(() => document.querySelector('#dontfoid')?.remove());
  // The provider can initialize with the menu already open; avoid toggling it shut.
  const sorani=f.locator('[role="menuitemradio"]:visible').filter({hasText:'کوردی سۆرانی'}).first();
- if (!await sorani.isVisible()) await f.locator('#media-menu-button-1').click({timeout:10000});
+ if (!await sorani.isVisible()) { await f.locator('#media-menu-button-1').focus(); await p.keyboard.press('Enter'); }
  await sorani.waitFor({state:'visible',timeout:10000});
  await sorani.click({timeout:10000});
  const checked=await sorani.getAttribute('aria-checked');

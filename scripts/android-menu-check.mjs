@@ -63,7 +63,11 @@ try {
       await send('Input.dispatchTouchEvent', {type:'touchEnd',touchPoints:[]});
     };
     const visible = () => evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی' && e.getBoundingClientRect().width > 0)", contextId);
-    if (!await visible()) await tapInFrame('#media-menu-button-1');
+    if (!await visible()) {
+      await evaluate("document.querySelector('#media-menu-button-1')?.focus()", contextId);
+      await send('Input.dispatchKeyEvent', {type:'keyDown', key:'Enter', code:'Enter', windowsVirtualKeyCode:13});
+      await send('Input.dispatchKeyEvent', {type:'keyUp', key:'Enter', code:'Enter', windowsVirtualKeyCode:13});
+    }
     await wait(async function captionOptionsVisible() { return visible(); }, 10000);
     await evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).filter(e => e.textContent.trim() === 'کوردی سۆرانی').forEach(e => e.setAttribute('data-dimo-test', 'sorani'))", contextId);
     await evaluate("Array.from(document.querySelectorAll('[data-dimo-test=sorani]')).find(e => e.getBoundingClientRect().width > 0)?.scrollIntoView({block:'nearest'})", contextId);
@@ -74,7 +78,7 @@ try {
     console.log(`::notice title=Player menu diagnostic::${diagnostic}`);
     throw error;
   }
-  console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option using touch (with the provider ad removed in the test)');
+  console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option (opening via keyboard, with the provider ad removed in the test)');
 } catch(error) {
   console.log(`::error title=Android subtitle menu::${String(error.message).split('\n')[0]}`); process.exitCode=1;
 } finally { socket?.close(); }
