@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   debug-apk:
@@ -54,14 +54,6 @@ jobs:
           name: dimo-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Publish Nali debug APK
-        if: contains(github.event.head_commit.message, '[publish-nali]')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/Nali.apk
-          gh release upload nali-v14 /tmp/Nali.apk --clobber
-          gh release edit nali-v14 --draft=false
       - name: Check live movie search and playback
         if: contains(github.event.head_commit.message, '[live-check]')
         run: |
