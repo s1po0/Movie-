@@ -38,12 +38,12 @@ public class UpdaterPlugin extends Plugin {
         try {
             DownloadManager manager = (DownloadManager) getContext().getSystemService(Context.DOWNLOAD_SERVICE);
             DownloadManager.Request request = new DownloadManager.Request(uri);
-            request.setTitle("Nali update");
+            request.setTitle("Kurd Movie update");
             request.setDescription("Tap when the download finishes to install the update");
             request.setMimeType("application/vnd.android.package-archive");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalFilesDir(getContext(), Environment.DIRECTORY_DOWNLOADS,
-                    "Nali-update-" + System.currentTimeMillis() + ".apk");
+                    "Kurd-Movie-update-" + System.currentTimeMillis() + ".apk");
             manager.enqueue(request);
             call.resolve();
         } catch (Exception error) {

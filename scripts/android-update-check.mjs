@@ -14,7 +14,7 @@ try {
   const deadline = Date.now() + 30000;
   while (!await evaluate("Boolean(window.Capacitor?.PluginHeaders?.some(p => p.name === 'Updater'))")) { if (Date.now() > deadline) throw Error('Updater plugin not registered'); await new Promise(r => setTimeout(r, 500)); }
   const version = await evaluate("window.Capacitor.nativePromise('Updater','getVersion',{})");
-  if (version.versionCode !== 14) throw Error(`Unexpected installed version ${version.versionCode}`);
+  if (version.versionCode !== 15) throw Error(`Unexpected installed version ${version.versionCode}`);
   const invalid = await evaluate("window.Capacitor.nativePromise('Updater','download',{url:'https://evil.example/Nali.apk'}).then(()=>'accepted').catch(()=>'rejected')");
   if (invalid !== 'rejected') throw Error('Untrusted update URL accepted');
   if (!await evaluate("Boolean(document.querySelector('[data-action=check-update]'))")) throw Error('Update button missing');

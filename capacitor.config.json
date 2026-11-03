@@ -1,6 +1,6 @@
 {
   "appId": "app.dimo.movies",
-  "appName": "نالی",
+  "appName": "Kurd Movie",
   "webDir": "dist",
   "android": { "allowMixedContent": false }
 }
