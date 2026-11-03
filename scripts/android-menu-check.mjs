@@ -51,14 +51,27 @@ try {
   if (fetched.status !== 200 || !fetched.text.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(fetched.text)) throw Error(`Android translated subtitle interception failed: HTTP ${fetched.status}`);
   try {
     await wait(async function menuReady() { return evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی')", contextId); }, 60000);
-    await evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).find(e => e.textContent.trim() === 'کوردی سۆرانی').click()", contextId);
+    // The provider can overlay an advertisement above its controls. Remove it only in
+    // this diagnostic to exercise the caption controls independently of that ad.
+    await evaluate("document.querySelector('#dontfoid')?.remove()", contextId);
+    const tapInFrame = async (selector) => {
+      const frameRect = await evaluate(`(() => { const r = document.querySelector('#player-modal iframe').getBoundingClientRect(); return {x:r.x,y:r.y}; })()`);
+      const point = await evaluate(`(() => { const e = Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden'); if (!e) return null; const r = e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`, contextId);
+      if (!point) throw Error(`Visible player control not found: ${selector}`);
+      const x = Math.round(frameRect.x + point.x), y = Math.round(frameRect.y + point.y);
+      await send('Input.dispatchTouchEvent', {type:'touchStart',touchPoints:[{x,y}]});
+      await send('Input.dispatchTouchEvent', {type:'touchEnd',touchPoints:[]});
+    };
+    await tapInFrame('#media-menu-button-1');
+    await evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).filter(e => e.textContent.trim() === 'کوردی سۆرانی').forEach(e => e.setAttribute('data-dimo-test', 'sorani'))", contextId);
+    await tapInFrame('[data-dimo-test=sorani]');
     await wait(async function soraniSelected() { return evaluate("Array.from(document.querySelectorAll('[role=menuitemradio]')).some(e => e.textContent.trim() === 'کوردی سۆرانی' && e.getAttribute('aria-checked') === 'true')", contextId); }, 10000);
   } catch (error) {
     const diagnostic = await evaluate("JSON.stringify({text: document.body?.innerText?.slice(0,400), buttons: Array.from(document.querySelectorAll('button')).map(b=>b.innerText).filter(Boolean).slice(0,30), options: Array.from(document.querySelectorAll('[role=menuitemradio]')).map(e => e.textContent.trim()).slice(0,40)})", contextId).catch(() => 'frame context unavailable');
     console.log(`::notice title=Player menu diagnostic::${diagnostic}`);
     throw error;
   }
-  console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option');
+  console.log('::notice title=Android subtitle menu::The Android app automatically translated subtitles with Google, served its VTT, and selected the Sorani menu option using touch (with the provider ad removed in the test)');
 } catch(error) {
   console.log(`::error title=Android subtitle menu::${String(error.message).split('\n')[0]}`); process.exitCode=1;
 } finally { socket?.close(); }

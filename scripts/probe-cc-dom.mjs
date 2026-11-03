@@ -11,10 +11,10 @@ try {
  const frame=p.frames().find(f=>f.url().includes('sub_file='));
  await frame.evaluate(() => document.querySelector('#dontfoid')?.remove());
  await f.locator('#media-menu-button-1').click({timeout:10000});
- const english=f.locator('[role="menuitemradio"]').filter({hasText:'English'}).first();
+ const english=f.locator('[role="menuitemradio"]:visible').filter({hasText:'English'}).first();
  await english.click({timeout:10000});
  await f.locator('#media-menu-button-1').click({timeout:10000});
- const sorani=f.locator('[role="menuitemradio"]').filter({hasText:'کوردی سۆرانی'}).first();
+ const sorani=f.locator('[role="menuitemradio"]:visible').filter({hasText:'کوردی سۆرانی'}).first();
  await sorani.click({timeout:10000});
  const checked=await sorani.getAttribute('aria-checked');
  if(checked!=='true') throw Error(`Sorani selection did not apply: ${checked}`);
