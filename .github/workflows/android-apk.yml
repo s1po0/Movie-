@@ -31,7 +31,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           REQUIRE_SIGNING: ${{ contains(github.event.head_commit.message, '[secure-signing-check]') }}
+          LEGACY_COMPAT: ${{ contains(github.event.head_commit.message, '[compatible-release]') }}
         run: |
+          if [ "$LEGACY_COMPAT" = true ]; then
+            echo 'Building with the existing debug signing identity for a compatibility-checked update.'
+            exit 0
+          fi
           if [ "$REQUIRE_SIGNING" = true ]; then
             test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD" || { echo '::error::Persistent signing secrets are required for release.'; exit 1; }
           fi
@@ -55,6 +60,19 @@ jobs:
             grep -E -A 3 "error:|^FAILURE:|^\* What went wrong:|^\* Where:" /tmp/gradle-build.log | head -15 | while IFS= read -r line; do echo "::error::$line"; done
             exit 1
           }
+      - name: Verify compatibility with the installed legacy APK
+        if: contains(github.event.head_commit.message, '[compatible-release]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/previous-release
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          old=$($signer verify --print-certs /tmp/previous-release/Nali.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          new=$($signer verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$old" && test "$old" = "$new" || { echo '::error::Signing certificate does not match the installed v16 release; refusing to publish.'; exit 1; }
+          echo '::notice title=Signing compatibility::The built APK matches the v16 signing certificate.'
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -348,6 +366,57 @@ jobs:
           b=$($signer verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           test -n "$a" && test -n "$b"
           if [ "$a" = "$b" ]; then echo '::notice title=Runner debug key::Current runner signing certificate matches v16.'; else echo '::notice title=Runner debug key::Current runner signing certificate does not match v16.'; fi
+  legacy-release-upgrade-check:
+    if: contains(github.event.head_commit.message, '[compatible-release]')
+    needs: debug-apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dimo-debug-apk
+          path: /tmp/release-apk
+      - name: Prepare the published v16 APK and the exact new APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/previous-release
+          cp /tmp/previous-release/Nali.apk /tmp/kurd-upgrade-old.apk
+          cp /tmp/release-apk/app-debug.apk /tmp/kurd-upgrade-new.apk
+          echo EXPECTED_VERSION=17 >> "$GITHUB_ENV"
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: bash scripts/android-in-place-upgrade-check.sh
+  publish-compatible-v17:
+    if: contains(github.event.head_commit.message, '[compatible-release]')
+    needs: [debug-apk, legacy-release-upgrade-check, ui-check]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dimo-debug-apk
+          path: /tmp/release-apk
+      - name: Publish compatibility-verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp /tmp/release-apk/app-debug.apk /tmp/Kurd-Movie.apk
+          cp /tmp/release-apk/app-debug.apk /tmp/Nali.apk
+          gh release create nali-v17 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target "$GITHUB_SHA" --title "Kurd Movie v17" --prerelease --notes "Compatibility-checked debug update, signed with the same certificate as v15 and v16. Android requires installation approval. This uses the shared runner debug signing identity and is not suitable as a secure production release. Later builds must verify the signing certificate again."
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
