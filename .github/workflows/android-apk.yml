@@ -322,6 +322,32 @@ jobs:
           test -n "$a" && test -n "$b"
           if [ "$a" = "$b" ]; then result=match; else result=differ; fi
           echo "::notice title=Previous APK signing::Versions 15 and 16 certificates $result."
+  runner-signing-match:
+    if: contains(github.event.head_commit.message, '[runner-signing-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Compare test build against the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/previous-release
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          a=$($signer verify --print-certs /tmp/previous-release/Nali.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          b=$($signer verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$a" && test -n "$b"
+          if [ "$a" = "$b" ]; then echo '::notice title=Runner debug key::Current runner signing certificate matches v16.'; else echo '::notice title=Runner debug key::Current runner signing certificate does not match v16.'; fi
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
