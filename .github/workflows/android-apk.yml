@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') && !contains(github.event.head_commit.message, '[diagnose-emulator]') && !contains(github.event.head_commit.message, '[inspect-apk-certificates]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') && !contains(github.event.head_commit.message, '[diagnose-emulator]') && !contains(github.event.head_commit.message, '[inspect-apk-certificates]') && !contains(github.event.head_commit.message, '[inspect-cert-log]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -554,6 +554,18 @@ jobs:
             "$signer" verify --print-certs "$apk" | grep -E '^Signer #[0-9]+ certificate SHA-256 digest:' | while IFS= read -r line; do echo "::notice title=Certificate $apk::$line"; done
             sha256sum "$apk" | while IFS= read -r line; do echo "::notice title=APK checksum::$line"; done
           done
+  inspect-cert-log:
+    if: contains(github.event.head_commit.message, '[inspect-cert-log]')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run view 41858598981 --repo "${{ github.repository }}" --job 126673880112 --log > /tmp/cert-log
+          grep -iE 'error|exception|signer|java|sha-256' /tmp/cert-log | tail -20 | cut -c1-450 | while IFS= read -r line; do echo "::notice title=Certificate diagnostic::$line"; done
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
