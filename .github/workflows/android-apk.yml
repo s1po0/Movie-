@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
+    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -417,6 +418,48 @@ jobs:
           cp /tmp/release-apk/app-debug.apk /tmp/Kurd-Movie.apk
           cp /tmp/release-apk/app-debug.apk /tmp/Nali.apk
           gh release create nali-v17 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target "$GITHUB_SHA" --title "Kurd Movie v17" --prerelease --notes "Compatibility-checked debug update, signed with the same certificate as v15 and v16. Android requires installation approval. This uses the shared runner debug signing identity and is not suitable as a secure production release. Later builds must verify the signing certificate again."
+  find-compatible-runner:
+    if: contains(github.event.head_commit.message, '[find-compatible-runner]')
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Compare with the original release
+        id: signature
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/previous-release
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          old=$($signer verify --print-certs /tmp/previous-release/Nali.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          new=$($signer verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$old" && test -n "$new"
+          if [ "$old" = "$new" ]; then
+            echo 'matched=true' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Signing check::A compatible build was found.'
+          else
+            echo 'matched=false' >> "$GITHUB_OUTPUT"
+            echo '::notice title=Signing check::This runner has a different signing certificate.'
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.signature.outputs.matched == 'true'
+        with:
+          name: compatible-v17-${{ matrix.attempt }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
