@@ -25,6 +25,8 @@ try {
     await page.locator('#asian-chinese').getByText('Chinese film').waitFor();
     await page.locator('#asian-korean [data-play]').first().click();
     await page.locator('#player-modal iframe[src*="/tv/94796/1/1"]').waitFor();
+    if (await page.locator('#player-modal').getByText('کردنەوە لە پەڕەیەکی تر').count()) throw Error('Removed external player link is visible for series');
+    await page.locator('#player-modal [data-action=retry-player]').waitFor();
     await page.locator('#episode-number').fill('2');
     await page.locator('[data-action=play-episode]').click();
     await page.locator('#player-modal iframe[src*="/tv/94796/1/2"]').waitFor();
@@ -46,6 +48,9 @@ try {
     await page.locator('#modal .saved-title').getByText('My saved movie').waitFor();
     await page.locator('#modal [data-action="close"]').click();
     await page.locator('[data-play="cinebloom-155"]').first().click();
+    await page.locator('#player-modal iframe').waitFor();
+    if (await page.locator('#player-modal').getByText('کردنەوە لە پەڕەیەکی تر').count()) throw Error('Removed external player link is visible for movies');
+    await page.locator('#player-modal [data-action=retry-player]').click();
     await page.locator('#player-modal iframe').waitFor();
     await page.locator('#player-modal [data-action="close-player"]').click();
     if (errors.length) throw Error(errors.join('; '));
