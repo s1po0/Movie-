@@ -286,6 +286,42 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: bash scripts/android-in-place-upgrade-check.sh
+  signing-access-audit:
+    if: contains(github.event.head_commit.message, '[signing-access-audit]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check whether workflow can manage signing secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api repos/${{ github.repository }}/actions/secrets/public-key >/dev/null 2>&1; then
+            echo '::notice title=Signing permissions::Workflow can access the repository secret public key.'
+          else
+            echo '::notice title=Signing permissions::Workflow cannot access the repository secret public key.'
+          fi
+      - name: Compare public certificates on prior APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for version in 15 16; do
+            mkdir -p "/tmp/release-$version"
+            gh release download "nali-v$version" --repo "${{ github.repository }}" --pattern Nali.apk --dir "/tmp/release-$version"
+          done
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          a=$($signer verify --print-certs /tmp/release-15/Nali.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          b=$($signer verify --print-certs /tmp/release-16/Nali.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$a" && test -n "$b"
+          if [ "$a" = "$b" ]; then result=match; else result=differ; fi
+          echo "::notice title=Previous APK signing::Versions 15 and 16 certificates $result."
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
