@@ -37,7 +37,10 @@ jobs:
           fi
           if [ -n "$STORE_B64$STORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
             test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
-            printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/android-update.keystore"
+            if ! printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/android-update.keystore" 2>/dev/null; then
+              echo '::error::The ANDROID_KEYSTORE_BASE64 secret is not valid base64.'; exit 1
+            fi
+            if [ ! -s "$RUNNER_TEMP/android-update.keystore" ]; then echo '::error::Decoded keystore is empty.'; exit 1; fi
             chmod 600 "$RUNNER_TEMP/android-update.keystore"
             echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-update.keystore" >> "$GITHUB_ENV"
           fi
@@ -237,8 +240,14 @@ jobs:
         run: |
           set -eu
           test -n "$STORE_B64" && test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD" || { echo '::error::Persistent signing secrets are missing'; exit 1; }
-          printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/secure-signing.keystore"
+          if ! printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/secure-signing.keystore" 2>/dev/null; then
+            echo '::error::The ANDROID_KEYSTORE_BASE64 secret is not valid base64.'; exit 1
+          fi
+          if [ ! -s "$RUNNER_TEMP/secure-signing.keystore" ]; then echo '::error::Decoded keystore is empty.'; exit 1; fi
           chmod 600 "$RUNNER_TEMP/secure-signing.keystore"
+          if ! keytool -list -keystore "$RUNNER_TEMP/secure-signing.keystore" -storetype PKCS12 -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1; then
+            echo '::error::The keystore, its password or key alias is incorrect.'; exit 1
+          fi
           export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/secure-signing.keystore"
           version=$(sed -n 's/^[[:space:]]*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle)
           test "$(echo "$version" | wc -l)" -eq 1 && test "$version" -gt 1
