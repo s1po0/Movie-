@@ -217,6 +217,39 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: bash scripts/android-in-place-upgrade-check.sh
+  signing-diagnostic:
+    if: contains(github.event.head_commit.message, '[signing-diagnostic]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Inspect signing configuration without revealing secrets
+        env:
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          n=${#STORE_B64}
+          if [ "$n" -eq 0 ]; then size=empty; elif [ "$n" -lt 128 ]; then size=very-short; elif [ "$n" -lt 512 ]; then size=short; else size=long; fi
+          echo "::notice title=Signing diagnostic::Keystore secret size category: $size"
+          for name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -n "${!name}" ]; then echo "::notice title=Signing diagnostic::$name is configured"; else echo "::notice title=Signing diagnostic::$name is missing"; fi
+          done
+          if printf '%s' "$STORE_B64" | base64 --ignore-garbage --decode > "$RUNNER_TEMP/signing.keystore" 2>/dev/null && [ -s "$RUNNER_TEMP/signing.keystore" ]; then
+            echo '::notice title=Signing diagnostic::Keystore text can be decoded after ignoring non-base64 characters'
+            if keytool -list -keystore "$RUNNER_TEMP/signing.keystore" -storetype PKCS12 -storepass:env ANDROID_KEYSTORE_PASSWORD >/dev/null 2>&1; then
+              echo '::notice title=Signing diagnostic::Keystore and store password are valid'
+              if keytool -list -keystore "$RUNNER_TEMP/signing.keystore" -storetype PKCS12 -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1; then echo '::notice title=Signing diagnostic::Key alias is valid'; else echo '::notice title=Signing diagnostic::Key alias not found'; fi
+            else
+              echo '::notice title=Signing diagnostic::Decoded data is not a valid keystore with the configured password'
+            fi
+          else
+            echo '::notice title=Signing diagnostic::Keystore secret cannot be decoded even after ignoring non-base64 characters'
+          fi
   secure-signing-upgrade-check:
     if: contains(github.event.head_commit.message, '[release-v17]') || contains(github.event.head_commit.message, '[secure-signing-check]')
     runs-on: ubuntu-24.04
