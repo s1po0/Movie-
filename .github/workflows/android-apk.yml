@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -460,6 +460,64 @@ jobs:
           name: compatible-v17-${{ matrix.attempt }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+  verify-v17-artifact-upgrade:
+    if: contains(github.event.head_commit.message, '[release-artifact]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: compatible-v17-1
+          path: /tmp/v17-artifact
+          run-id: 41857670451
+          github-token: ${{ github.token }}
+      - name: Prepare actual old and new APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/previous-release
+          cp /tmp/previous-release/Nali.apk /tmp/kurd-upgrade-old.apk
+          cp /tmp/v17-artifact/app-debug.apk /tmp/kurd-upgrade-new.apk
+          echo EXPECTED_VERSION=17 >> "$GITHUB_ENV"
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: bash scripts/android-in-place-upgrade-check.sh
+  publish-tested-v17:
+    if: contains(github.event.head_commit.message, '[release-artifact]')
+    needs: [verify-v17-artifact-upgrade, ui-check]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: compatible-v17-1
+          path: /tmp/v17-artifact
+          run-id: 41857670451
+          github-token: ${{ github.token }}
+      - name: Publish the exact tested APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp /tmp/v17-artifact/app-debug.apk /tmp/Kurd-Movie.apk
+          cp /tmp/v17-artifact/app-debug.apk /tmp/Nali.apk
+          gh release create nali-v17 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target a8e4b4838ae96b5944dbfa2a22199563471ffccc --title "Kurd Movie v17" --prerelease --notes "Tested in-place update from v16. Android still requires installation approval. This APK uses the prior CI debug signing identity; it is not suitable as a secure production release. Future releases must verify their certificate before publishing."
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
