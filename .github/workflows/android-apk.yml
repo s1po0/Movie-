@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') && !contains(github.event.head_commit.message, '[diagnose-emulator]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') && !contains(github.event.head_commit.message, '[diagnose-emulator]') && !contains(github.event.head_commit.message, '[inspect-apk-certificates]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -531,6 +531,29 @@ jobs:
         run: |
           gh run view 41858134587 --repo "${{ github.repository }}" --job 126672236178 --log > /tmp/upgrade-log
           grep -iE 'fail|error|exception|denied|unable' /tmp/upgrade-log | tail -15 | cut -c1-400 | while IFS= read -r line; do echo "::notice title=Upgrade diagnostic::$line"; done
+  inspect-apk-certificates:
+    if: contains(github.event.head_commit.message, '[inspect-apk-certificates]')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: compatible-v17-1
+          path: /tmp/v17
+          run-id: 41857670451
+          github-token: ${{ github.token }}
+      - name: Report public APK certificate fingerprints
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download nali-v16 --repo "${{ github.repository }}" --pattern Nali.apk --dir /tmp/v16
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          for apk in /tmp/v16/Nali.apk /tmp/v17/app-debug.apk; do
+            "$signer" verify --print-certs "$apk" | grep -E '^Signer #[0-9]+ certificate SHA-256 digest:' | while IFS= read -r line; do echo "::notice title=Certificate $apk::$line"; done
+            sha256sum "$apk" | while IFS= read -r line; do echo "::notice title=APK checksum::$line"; done
+          done
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
