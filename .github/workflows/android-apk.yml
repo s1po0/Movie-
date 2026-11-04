@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[find-compatible-runner]') && !contains(github.event.head_commit.message, '[release-artifact]') && !contains(github.event.head_commit.message, '[diagnose-emulator]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -518,6 +518,19 @@ jobs:
           cp /tmp/v17-artifact/app-debug.apk /tmp/Kurd-Movie.apk
           cp /tmp/v17-artifact/app-debug.apk /tmp/Nali.apk
           gh release create nali-v17 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target a8e4b4838ae96b5944dbfa2a22199563471ffccc --title "Kurd Movie v17" --prerelease --notes "Tested in-place update from v16. Android still requires installation approval. This APK uses the prior CI debug signing identity; it is not suitable as a secure production release. Future releases must verify their certificate before publishing."
+  emulator-test-diagnostic:
+    if: contains(github.event.head_commit.message, '[diagnose-emulator]')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check the failed upgrade-test log for errors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run view 41858134587 --repo "${{ github.repository }}" --job 126672236178 --log > /tmp/upgrade-log
+          grep -iE 'fail|error|exception|denied|unable' /tmp/upgrade-log | tail -15 | cut -c1-400 | while IFS= read -r line; do echo "::notice title=Upgrade diagnostic::$line"; done
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
