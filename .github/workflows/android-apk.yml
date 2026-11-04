@@ -30,7 +30,11 @@ jobs:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          REQUIRE_SIGNING: ${{ contains(github.event.head_commit.message, '[release-v17]') }}
         run: |
+          if [ "$REQUIRE_SIGNING" = true ]; then
+            test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD" || { echo '::error::Persistent signing secrets are required for release.'; exit 1; }
+          fi
           if [ -n "$STORE_B64$STORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
             test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
             printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/android-update.keystore"
@@ -210,6 +214,88 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: bash scripts/android-in-place-upgrade-check.sh
+  secure-signing-upgrade-check:
+    if: contains(github.event.head_commit.message, '[release-v17]') || contains(github.event.head_commit.message, '[secure-signing-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync
+      - name: Build current and next version with the configured signing key
+        env:
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$STORE_B64" && test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD" || { echo '::error::Persistent signing secrets are missing'; exit 1; }
+          printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/secure-signing.keystore"
+          chmod 600 "$RUNNER_TEMP/secure-signing.keystore"
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/secure-signing.keystore"
+          version=$(sed -n 's/^[[:space:]]*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle)
+          test "$(echo "$version" | wc -l)" -eq 1 && test "$version" -gt 1
+          echo "EXPECTED_VERSION=$((version + 1))" >> "$GITHUB_ENV"
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-old.apk
+          sed -i "s/versionCode $version/versionCode $((version + 1))/" android/app/build.gradle
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-new.apk
+      - name: Check compatibility with earlier published versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          current=$($signer verify --print-certs /tmp/kurd-upgrade-old.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$current"
+          for version in 15 16; do
+            mkdir -p "/tmp/previous-$version"
+            gh release download "nali-v$version" --pattern Nali.apk --dir "/tmp/previous-$version"
+            previous=$($signer verify --print-certs "/tmp/previous-$version/Nali.apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            test -n "$previous"
+            if [ "$current" = "$previous" ]; then result=matches; else result=differs; fi
+            echo "::notice title=Previous APK signing::The configured key $result version $version."
+          done
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: bash scripts/android-in-place-upgrade-check.sh
+  publish-v17:
+    if: contains(github.event.head_commit.message, '[release-v17]')
+    needs: [debug-apk, secure-signing-upgrade-check]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dimo-debug-apk
+          path: /tmp/release-apk
+      - name: Publish signed Kurd Movie v17
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp /tmp/release-apk/app-debug.apk /tmp/Kurd-Movie.apk
+          cp /tmp/release-apk/app-debug.apk /tmp/Nali.apk
+          gh release create nali-v17 /tmp/Kurd-Movie.apk /tmp/Nali.apk --target "$GITHUB_SHA" --title "Kurd Movie v17" --prerelease --notes "First release with persistent signing. Earlier debug versions may require a one-time reinstall and uninstalling may erase saved app data. Future updates signed with the same key can be installed in place."
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
