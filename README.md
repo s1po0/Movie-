@@ -40,3 +40,7 @@ The old APK's own private key is necessary to update that existing installation.
 ### Signing-key migration
 
 The v17 APK for the new signing key is distributed under a separate `kurd-movie-v17-new-key` tag, not the legacy updater's `nali-v17` channel: it cannot update an installation signed with the lost v16 key. Its keystore is backed up privately, but the repository Actions signing secrets have not been configured for it. The v17 APK was built unsigned in CI and signed offline. Subsequent releases must use the same new key. Before enabling automatic updates for the new-key app, separate the update channel from the legacy v16 channel; otherwise older installs would be offered an incompatible APK.
+
+## Android offline downloads
+
+The Android app can save direct HTTPS MP4 and WebM files for offline playback with a Kurdish subtitle. Translate a loaded subtitle to Sorani first, or explicitly mark an uploaded source as Kurdish, then download from the direct player. Downloads continue through Android DownloadManager; the offline list shows progress, playback and deletion. Files are stored in app-specific storage and are removed if the app is uninstalled. Translation and the initial download require internet and enough free storage. Use only media you have permission to download. HLS, DRM and embedded third-party players (including Tomb of Fallen Gods' provider) are not supported for offline downloads; the app does not extract media from those players. Their availability and subtitle access remain dependent on their providers.

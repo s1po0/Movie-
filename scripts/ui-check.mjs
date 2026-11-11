@@ -19,6 +19,11 @@ try {
     await page.route('https://images.metahub.space/**', route => route.abort());
     await page.goto('http://127.0.0.1:5173/');
     await page.locator('#shelf-action .catalog-card').first().waitFor();
+    await page.locator('.offline-banner [data-action=offline]').click();
+    await page.locator('#offline-list').getByText('دابەزاندنی ئۆفلاین تەنها لە ئەپی ئەندرۆید بەردەستە.').waitFor();
+    await page.locator('#modal [data-action=close]').click();
+    const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+    if (width.scroll > width.viewport) throw Error(`Horizontal page overflow: ${JSON.stringify(width)}`);
     await page.locator('#asian').scrollIntoViewIfNeeded();
     await page.locator('#asian-koreanMovie').getByText('Korean film').waitFor();
     await page.locator('#asian-korean').getByText('Korean drama').waitFor();
@@ -26,6 +31,7 @@ try {
     await page.locator('#asian-chinese').getByText('Chinese film').waitFor();
     await page.locator('#asian-korean [data-play]').first().click();
     await page.locator('#player-modal iframe[src*="/tv/94796/1/1"]').waitFor();
+    await page.locator('.offline-unsupported').waitFor();
     if (await page.locator('#player-modal').getByText('کردنەوە لە پەڕەیەکی تر').count()) throw Error('Removed external player link is visible for series');
     await page.locator('#player-modal [data-action=retry-player]').waitFor();
     await page.locator('#episode-number').fill('2');

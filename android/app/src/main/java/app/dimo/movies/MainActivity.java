@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DonkeyPlayerPlugin.class);
         registerPlugin(MenuSubtitlePlugin.class);
         registerPlugin(UpdaterPlugin.class);
+        registerPlugin(OfflinePlugin.class);
         super.onCreate(savedInstanceState);
         getBridge().getWebView().setWebViewClient(new SubtitleWebViewClient(getBridge()));
     }
