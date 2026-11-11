@@ -355,15 +355,15 @@ function startEmbeddedPlayer(frame, session) {
     status.textContent = 'ئەگەر پەخشەکە درێژی کێشا، دووبارە هەوڵ بدە یان لە پەڕەیەکی تر بیکەرەوە.';
   }, 20000);
 }
-async function subtitleHttp(url, responseType) {
+async function subtitleHttp(url, responseType, headers = {}) {
   if (Capacitor.isNativePlatform()) {
-    const result = await CapacitorHttp.get({ url, responseType, connectTimeout: 10000, readTimeout: 10000 });
+    const result = await CapacitorHttp.get({ url, responseType, headers, connectTimeout: 10000, readTimeout: 10000 });
     if (result.status < 200 || result.status >= 300) throw new Error(`HTTP ${result.status}`);
     return responseType === 'json' && typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
   }
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal, headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return responseType === 'json' ? response.json() : response.text();
   } finally { clearTimeout(timer); }
@@ -379,11 +379,14 @@ async function providerEnglishSubtitle(movie, valid) {
   if (!valid() || !/^\d{1,12}$/.test(id)) throw new Error('No movie ID');
   const { movieSourceUrl, seriesSourceUrl, movieSources } = await import('./vidlink.js');
   const sourceUrl = movie.mediaKind === 'series' ? seriesSourceUrl(id, movie.season || 1, movie.episode || 1) : movieSourceUrl(id);
-  const data = await subtitleHttp(sourceUrl, 'json');
+  // The provider rejects non-browser clients without these request headers.
+  const headers = { 'User-Agent':'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    Referer: embeddedUrl(movie), Origin: 'https://vidlink.pro', Accept: '*/*' };
+  const data = await subtitleHttp(sourceUrl, 'json', headers);
   if (!valid()) throw new Error('Cancelled');
   const track = movieSources(data).subtitles.find(item => /english|\beng?\b/i.test(item.label));
   if (!track || new URL(track.url).hostname !== 'cacdn.hakunaymatata.com' || new URL(track.url).port) throw new Error('No player subtitle');
-  const text = await subtitleHttp(track.url, 'text');
+  const text = await subtitleHttp(track.url, 'text', headers);
   if (typeof text !== 'string' || text.length > 2_000_000 || parseSubtitles(text).length < 10) throw new Error('Invalid player subtitle');
   return text;
 }

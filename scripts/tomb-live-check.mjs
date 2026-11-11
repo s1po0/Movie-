@@ -44,12 +44,13 @@ try {
   const { seriesSourceUrl, movieSources } = await import('../src/vidlink.js');
   const { parseSubtitles } = await import('../src/subtitles.js');
   await Promise.all([1,2,3].map(async season => {
-    const response = await fetch(seriesSourceUrl('206343', season, 1), {signal:AbortSignal.timeout(30000)});
+    const headers = {'User-Agent':'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36', Referer:`https://vidlink.pro/tv/206343/${season}/1`, Origin:'https://vidlink.pro', Accept:'*/*'};
+    const response = await fetch(seriesSourceUrl('206343', season, 1), {headers,signal:AbortSignal.timeout(30000)});
     if (!response.ok) throw Error(`season ${season}: source HTTP ${response.status}`);
     const data = await response.json();
     const caption = movieSources(data).subtitles.find(item => /english|\beng?\b/i.test(item.label));
     if (!caption || new URL(caption.url).hostname !== 'cacdn.hakunaymatata.com') throw Error(`season ${season}: no English caption`);
-    const track = await fetch(caption.url, {signal:AbortSignal.timeout(30000)});
+    const track = await fetch(caption.url, {headers,signal:AbortSignal.timeout(30000)});
     if (!track.ok) throw Error(`season ${season}: caption HTTP ${track.status}`);
     const count = parseSubtitles(await track.text()).length;
     if (count < 10) throw Error(`season ${season}: caption too short`);
