@@ -498,7 +498,7 @@ async function loadEpisodePicker(movie, session) {
     setEpisodes(movie.episode || 1);
     season.addEventListener('change', () => setEpisodes(1));
     oldSeason.replaceWith(season); oldEpisode.replaceWith(episode);
-  } catch { /* Numeric controls remain usable if episode metadata is unavailable. */ }
+  } catch (error) { console.warn('Episode picker unavailable:', error?.message || 'network error'); /* Numeric controls remain usable. */ }
 }
 function openPlayer(movie) {
   if (!movie) return;

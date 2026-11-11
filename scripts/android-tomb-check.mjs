@@ -7,13 +7,13 @@ try {
   socket = new WebSocket(ws.href);
   await new Promise((resolve,reject) => {socket.onopen=resolve;socket.onerror=reject;});
   let sequence=0; const pending=new Map();
-  socket.onmessage = message => { const data=JSON.parse(message.data), p=pending.get(data.id); if(!p)return; pending.delete(data.id); data.error?p.reject(Error(data.error.message)):p.resolve(data.result); };
+  socket.onmessage = message => { const data=JSON.parse(message.data); if(data.method==='Runtime.consoleAPICalled') { const text=(data.params?.args||[]).map(a=>a.value||'').join(' '); if(text.startsWith('Episode picker unavailable:')) console.log(`::notice title=Episode picker error::${text}`); } const p=pending.get(data.id); if(!p)return; pending.delete(data.id); data.error?p.reject(Error(data.error.message)):p.resolve(data.result); };
   const send = (method,params={}) => new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
   const evaluate = async (expression,contextId) => {const out=await send('Runtime.evaluate',{expression,contextId,awaitPromise:true,returnByValue:true});if(out.exceptionDetails)throw Error(out.exceptionDetails.text);return out.result.value;};
   const wait = async (name,fn,timeout=60000) => {const end=Date.now()+timeout;while(Date.now()<end){try{const result=await fn();if(result)return result;}catch{}await new Promise(r=>setTimeout(r,1000));}throw Error(`Timed out: ${name}`);};
   await send('Page.enable'); await send('Runtime.enable');
   await wait('app ready',()=>evaluate('Boolean(document.querySelector(\'[data-play="series-tomb-of-fallen-gods"]\'))'),30000);
-  const metaDiagnostic = await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','get',{url:'https://v3-cinemeta.strem.io/meta/series/tt31530980.json',responseType:'json',connectTimeout:10000,readTimeout:10000}).then(r=>({status:r.status, dataType:typeof r.data, id:r.data?.meta?.id || null, videos:r.data?.meta?.videos?.length || 0})).catch(e=>({error:String(e.message).slice(0,100)}))`);
+  const metaDiagnostic = await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','get',{url:'https://v3-cinemeta.strem.io/meta/series/tt31530980.json',responseType:'json',connectTimeout:10000,readTimeout:10000}).then(r=>({status:r.status, dataType:typeof r.data, id:r.data?.meta?.id || null, videos:r.data?.meta?.videos?.length || 0, now:new Date().toISOString(), optionType:typeof Option})).catch(e=>({error:String(e.message).slice(0,100)}))`);
   console.log(`::notice title=Episode metadata diagnostic::${JSON.stringify(metaDiagnostic)}`);
   for (const season of [2,3]) {
     await evaluate(`document.querySelector('[data-play="series-tomb-of-fallen-gods"]').click()`);
