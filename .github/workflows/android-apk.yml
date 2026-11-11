@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[local-sign-build]') && !contains(github.event.head_commit.message, '[signed-install-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -333,85 +333,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
-  local-sign-build:
-    if: contains(github.event.head_commit.message, '[local-sign-build]')
-    permissions:
-      contents: write
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - run: npm ci && npm test && npm run android:sync
-      - name: Build unsigned APK for offline signing
-        working-directory: android
-        run: ./gradlew --no-daemon assembleRelease
-      - name: Collect unsigned APK and Android signing tool
-        run: |
-          mkdir -p /tmp/offline-sign
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/offline-sign/
-          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner.jar | sort -V | tail -1)
-          test -n "$signer"
-          cp "$signer" /tmp/offline-sign/apksigner.jar
-      - name: Prepare offline signing runtime
-        run: |
-          jlink --add-modules java.base,java.logging,java.xml,java.naming,jdk.crypto.ec,jdk.crypto.cryptoki --strip-debug --no-header-files --no-man-pages --compress zip-6 --output /tmp/signing-jre
-          tar -C /tmp -czf /tmp/offline-sign/jre.tar.gz signing-jre
-      - name: Make unsigned build available for offline signing
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY2'
-          import base64, json, os, subprocess
-          for name in ('app-release-unsigned.apk', 'apksigner.jar', 'jre.tar.gz'):
-              data = open('/tmp/offline-sign/' + name, 'rb').read()
-              payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
-              result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
-              print('::notice title=Offline build blob::'+name+' '+json.loads(result.stdout)['sha'], flush=True)
-          PY2
-      - uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-kurd-movie-v17
-          path: /tmp/offline-sign/
-          if-no-files-found: error
-          retention-days: 3
-  signed-install-check:
-    if: contains(github.event.head_commit.message, '[signed-install-check]')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - name: Retrieve signed APK
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/9e52050546926473d9122dbe87a1103e8837d3ee > /tmp/kurd-movie.apk
-          echo '375d4fba35161f49200b7593286ae4131caa11192630bd43a8d6a51328e28e75  /tmp/kurd-movie.apk' | sha256sum -c -
-      - name: Enable hardware virtualization
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
-          script: |
-            adb install /tmp/kurd-movie.apk
-            adb shell dumpsys package app.dimo.movies | grep 'versionCode=17'
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell pidof app.dimo.movies
-            adb install -r /tmp/kurd-movie.apk
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell pidof app.dimo.movies
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
