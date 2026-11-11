@@ -12,10 +12,14 @@ try {
           const path = u.pathname.split('/').slice(0, 5).map((p, i) => i === 4 && p.length > 20 ? '<token>' : p).join('/');
           const info = {path, status:response.status()}; responses.push(info);
           if (u.pathname.startsWith('/api/b/tv/')) pending.push((async () => {
-            const raw = Uint8Array.from(Buffer.from(u.pathname.split('/').pop(), 'base64url'));
-            const key = Uint8Array.from('c75136c5668bbfe65a7ecad431a745db68b5f381555b38d8f6c699449cf11fcd'.match(/../g), x=>parseInt(x,16));
-            const plain = nacl.secretbox.open(raw.subarray(24), raw.subarray(0,24), key);
-            if (plain) info.tokenPayload = Buffer.from(plain.subarray(0,plain.length-8)).toString('utf8');
+            const segments = u.pathname.split('/');
+            info.segmentShape = segments.slice(4).map(p => /^\d{1,4}$/.test(p) ? p : `len${p.length}`);
+            try {
+              const raw = Uint8Array.from(Buffer.from(segments[4], 'base64url'));
+              const key = Uint8Array.from('c75136c5668bbfe65a7ecad431a745db68b5f381555b38d8f6c699449cf11fcd'.match(/../g), x=>parseInt(x,16));
+              const plain = nacl.secretbox.open(raw.subarray(24), raw.subarray(0,24), key);
+              if (plain) info.tokenPayload = Buffer.from(plain.subarray(0,plain.length-8)).toString('utf8');
+            } catch { info.tokenPayload = 'unavailable'; }
             try { const data = await response.json(); info.captionInfo = (data?.stream?.captions || []).map(c => ({language:c.language,type:c.type,host:(()=>{try{return new URL(c.url).hostname}catch{return ''}})()})).slice(0,20); } catch { info.captionInfo = 'unavailable'; }
           })().catch(() => { info.captionInfo = 'parse-error'; }));
         }
