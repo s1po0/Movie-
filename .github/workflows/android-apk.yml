@@ -369,7 +369,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci && npm install --no-save --no-package-lock playwright-core
-      - run: node scripts/tomb-quality-probe.mjs
+      - run: node scripts/tomb-quality-controls.mjs
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
