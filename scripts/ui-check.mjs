@@ -8,6 +8,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     await page.route('https://v3-cinemeta.strem.io/**', route => {
       const url = route.request().url();
+      if (url.includes('/meta/series/tt31530980.json')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({meta:{id:'tt31530980',videos:[{season:1,episode:1},{season:2,episode:1},{season:2,episode:2},{season:3,episode:1},{season:3,episode:52}]}})}); return; }
       if (url.includes('/meta/series/tt10850932.json')) { route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},contentType:'application/json',body:JSON.stringify({meta:{id:'tt10850932',type:'series',name:'Korean drama',country:'South Korea',genres:['Drama'],moviedb_id:94796}})}); return; }
       const genre = /genre=([^&.]+)/.exec(url)?.[1] || 'Popular';
       const names = url.includes('search=') ? ['The Matrix'] : [`${genre} One`, `${genre} Two`];
@@ -38,6 +39,15 @@ try {
     await page.locator('#catalog-search').fill('Matrix');
     await page.locator('#catalog-cards').getByText('The Matrix').first().waitFor();
     await page.locator('#catalog-cards').getByText('Korean drama').first().waitFor();
+    await page.locator('#catalog-search').fill('Shen Mu');
+    await page.locator('[data-play="series-tomb-of-fallen-gods"]').click();
+    await page.locator('#player-modal iframe[src*="/tv/206343/1/1"]').waitFor();
+    await page.locator('select#episode-season').waitFor();
+    await page.locator('#episode-season').selectOption('3');
+    await page.locator('#episode-number').selectOption('52');
+    await page.locator('[data-action=play-episode]').click();
+    await page.locator('#player-modal iframe[src*="/tv/206343/3/52"]').waitFor();
+    await page.locator('#player-modal [data-action=close-player]').click();
     if (await page.locator('#library').count()) throw Error('The removed library section is still visible');
     await page.locator('.top-add[data-action="library"]').click();
     await page.locator('#modal [data-action="add"]').click();

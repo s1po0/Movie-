@@ -27,6 +27,15 @@ export function movieSourceUrl(id, now = Date.now()) {
   return `https://vidlink.pro/api/b/movie/${token}?multiLang=1`;
 }
 
+// The TV API uses the same short-lived identifier token and appends the
+// validated season and episode to its path.
+export function seriesSourceUrl(id, season, episode, now = Date.now()) {
+  if (!Number.isInteger(season) || season < 1 || season > 999 || !Number.isInteger(episode) || episode < 1 || episode > 9999) throw new Error('Invalid episode identifier');
+  const url = new URL(movieSourceUrl(id, now));
+  url.pathname = url.pathname.replace('/api/b/movie/', '/api/b/tv/') + `/${season}/${episode}`;
+  return url.href;
+}
+
 export function movieSources(response) {
   const stream = response?.stream;
   if (!stream || typeof stream !== 'object') throw new Error('Movie source unavailable');

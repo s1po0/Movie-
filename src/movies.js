@@ -66,4 +66,10 @@ export const cinebloomMovies = [{
   id: 'cinebloom-155', title: 'The Dark Knight', year: '2008', type: 'ئەکشن · دراما',
   poster: 'https://image.tmdb.org/t/p/w342/qJ2tW6WMUDux911r6m7haRef0WH.jpg', tmdbId: '155', imdbId: 'tt0468569',
 }];
-export const movies = [...cinebloomMovies, ...classicMovies, ...openMovies];
+// Metadata identifies the series; the external provider supplies streams and captions.
+export const featuredSeries = [{
+  id: 'series-tomb-of-fallen-gods', title: 'Tomb of Fallen Gods', aliases: ['Shen Mu', 'Gods Tomb', '神墓'], year: '2022',
+  type: 'زنجیرە · ئەنیمەیشن', poster: 'https://image.tmdb.org/t/p/w342/8lV2Mjn5Km7DqlgbbPntYr7rRfV.jpg',
+  tmdbId: '206343', imdbId: 'tt31530980', mediaKind: 'series', season: 1, episode: 1,
+}];
+export const movies = [...featuredSeries, ...cinebloomMovies, ...classicMovies, ...openMovies];

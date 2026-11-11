@@ -11,6 +11,7 @@ import { isDonkeyPage } from './donkey.js';
 import { movieEmbedUrl, seriesEmbedUrl } from './vidlink-embed.js';
 import { asianCatalogUrl, asianCatalogResults, asianSeedIds, asianMetadataUrl, koreanDramaSearchUrl, subtitleIndexUrl, hasEnglishSubtitle } from './asian-catalog.js';
 import { createCatalogCache } from './catalog-cache.js';
+import { episodeGroups } from './episodes.js';
 import { createEmbeddedSubtitles } from './embedded-subtitles.js';
 import { findMovieSubtitles } from './subtitle-discovery.js';
 import { translateMenuSubtitles, withSubtitleTrack, createMenuTranslationCache } from './menu-subtitles.js';
@@ -26,6 +27,7 @@ const app = document.querySelector('#app');
 const icons = { Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film };
 const getCatalog = createCatalogCache(getJson);
 const menuTranslationCache = createMenuTranslationCache();
+const episodeMetadata = new Map();
 let library = readLibrary();
 let current = null, hls = null, subtitleUrls = {}, originalCues = null, playerSession = 0, subtitleVersion = 0, subtitleRequest = 0, translations = {}, playerTimer;
 let embeddedSubtitles = null, embeddedSourceRequest = 0, embeddedHasSource = false, embeddedOffset = 0;
@@ -370,15 +372,17 @@ async function providerEnglishSubtitle(movie, valid) {
   // Prefer the player's own English track so its timing matches this stream.
   let id = String(movie.tmdbId || '');
   if (!/^\d{1,12}$/.test(id) && /^tt\d{5,12}$/.test(movie.imdbId || '')) {
-    const meta = await subtitleHttp(`https://v3-cinemeta.strem.io/meta/movie/${movie.imdbId}.json`, 'json');
+    const kind = movie.mediaKind === 'series' ? 'series' : 'movie';
+    const meta = await subtitleHttp(`https://v3-cinemeta.strem.io/meta/${kind}/${movie.imdbId}.json`, 'json');
     id = String(meta?.meta?.moviedb_id || '');
   }
   if (!valid() || !/^\d{1,12}$/.test(id)) throw new Error('No movie ID');
-  const { movieSourceUrl, movieSources } = await import('./vidlink.js');
-  const data = await subtitleHttp(movieSourceUrl(id), 'json');
+  const { movieSourceUrl, seriesSourceUrl, movieSources } = await import('./vidlink.js');
+  const sourceUrl = movie.mediaKind === 'series' ? seriesSourceUrl(id, movie.season || 1, movie.episode || 1) : movieSourceUrl(id);
+  const data = await subtitleHttp(sourceUrl, 'json');
   if (!valid()) throw new Error('Cancelled');
   const track = movieSources(data).subtitles.find(item => /english|\beng?\b/i.test(item.label));
-  if (!track || new URL(track.url).hostname !== 'cacdn.hakunaymatata.com') throw new Error('No player subtitle');
+  if (!track || new URL(track.url).hostname !== 'cacdn.hakunaymatata.com' || new URL(track.url).port) throw new Error('No player subtitle');
   const text = await subtitleHttp(track.url, 'text');
   if (typeof text !== 'string' || text.length > 2_000_000 || parseSubtitles(text).length < 10) throw new Error('Invalid player subtitle');
   return text;
@@ -434,7 +438,7 @@ async function loadEmbeddedSource(movie, session) {
   status('گەڕان بۆ ژێرنووس بۆ وەرگێڕانی Google...');
   try {
     let text;
-    if (nativeMenuAvailable() && movie.mediaKind !== 'series') {
+    if (nativeMenuAvailable()) {
       try { text = await providerEnglishSubtitle(movie, valid); } catch { /* use an independent track when the player API is blocked */ }
     }
     if (!valid()) return;
@@ -465,6 +469,34 @@ function startEmbeddedSubtitles(movie, session) {
   }
   loadEmbeddedSource(movie, session);
 }
+async function loadEpisodePicker(movie, session) {
+  if (movie.id !== 'series-tomb-of-fallen-gods') return;
+  try {
+    let groups = episodeMetadata.get(movie.imdbId);
+    if (!groups) {
+      const meta = await subtitleHttp(`https://v3-cinemeta.strem.io/meta/series/${movie.imdbId}.json`, 'json');
+      groups = episodeGroups(meta, movie.imdbId);
+      if (groups.length) episodeMetadata.set(movie.imdbId, groups);
+    }
+    if (session !== playerSession || !groups.length) return;
+    const oldSeason = document.querySelector('#episode-season'), oldEpisode = document.querySelector('#episode-number');
+    if (!oldSeason || !oldEpisode) return;
+    const season = document.createElement('select'), episode = document.createElement('select');
+    season.id = oldSeason.id; episode.id = oldEpisode.id;
+    for (const group of groups) season.add(new Option(`وەرزی ${group.season}`, String(group.season)));
+    const selectedSeason = groups.some(group => group.season === (movie.season || 1)) ? movie.season || 1 : groups[0].season;
+    season.value = String(selectedSeason);
+    const setEpisodes = selected => {
+      episode.replaceChildren();
+      const entries = groups.find(group => group.season === Number(season.value))?.episodes || [];
+      for (const number of entries) episode.add(new Option(`ئەڵقەی ${number}`, String(number)));
+      episode.value = String(entries.includes(selected) ? selected : entries[0]);
+    };
+    setEpisodes(movie.episode || 1);
+    season.addEventListener('change', () => setEpisodes(1));
+    oldSeason.replaceWith(season); oldEpisode.replaceWith(episode);
+  } catch { /* Numeric controls remain usable if episode metadata is unavailable. */ }
+}
 function openPlayer(movie) {
   if (!movie) return;
   playerSession++; subtitleRequest++; current = movie; originalCues = null; translations = {};
@@ -476,6 +508,7 @@ function openPlayer(movie) {
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
     startEmbeddedSubtitles(movie, session);
+    if (movie.mediaKind === 'series') loadEpisodePicker(movie, session);
     frame.addEventListener('load', () => {
       if (session !== playerSession) return;
       document.querySelector('#embedded-loading')?.classList.add('hidden');

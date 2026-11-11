@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { movieEmbedUrl, movieSourceUrl, movieSources } from '../src/vidlink.js';
+import { movieEmbedUrl, movieSourceUrl, seriesSourceUrl, movieSources } from '../src/vidlink.js';
 
 test('builds a player embed URL only for numeric movie IDs', () => {
   assert.equal(movieEmbedUrl('155'), 'https://vidlink.pro/movie/155');
@@ -36,4 +36,14 @@ test('resolves playable sources and subtitle languages without retaining expired
   assert.equal(movieSources({ stream: { playlist: 'https://video.example/master.m3u8', captions: [] } }).source.type, 'hls');
   assert.equal(movieSources({ stream: { qualities: { 720: { type: 'mp4', url: 'http://video.example/a.mp4' } } } }).source, null);
   assert.throws(() => movieSources(null));
+});
+
+test('builds a validated episode-specific source request', () => {
+  const url = new URL(seriesSourceUrl('206343', 3, 52, 1700000000000));
+  assert.equal(url.origin, 'https://vidlink.pro');
+  assert.match(url.pathname, /^\/api\/b\/tv\/[A-Za-z0-9_-]+\/3\/52$/);
+  assert.equal(url.searchParams.get('multiLang'), '1');
+  assert.throws(() => seriesSourceUrl('206343', 0, 1));
+  assert.throws(() => seriesSourceUrl('206343', 3, 1.5));
+  assert.throws(() => seriesSourceUrl('../id', 1, 1));
 });
