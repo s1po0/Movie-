@@ -335,6 +335,8 @@ jobs:
           script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
   local-sign-build:
     if: contains(github.event.head_commit.message, '[local-sign-build]')
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -358,6 +360,22 @@ jobs:
           signer=$(find "$ANDROID_HOME/build-tools" -name apksigner.jar | sort -V | tail -1)
           test -n "$signer"
           cp "$signer" /tmp/offline-sign/apksigner.jar
+      - name: Prepare offline signing runtime
+        run: |
+          jlink --add-modules java.base,java.logging,java.xml,java.naming,jdk.crypto.ec,jdk.crypto.cryptoki --strip-debug --no-header-files --no-man-pages --compress zip-6 --output /tmp/signing-jre
+          tar -C /tmp -czf /tmp/offline-sign/jre.tar.gz signing-jre
+      - name: Make unsigned build available for offline signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY2'
+          import base64, json, os, subprocess
+          for name in ('app-release-unsigned.apk', 'apksigner.jar', 'jre.tar.gz'):
+              data = open('/tmp/offline-sign/' + name, 'rb').read()
+              payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+              result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
+              print('::notice title=Offline build blob::'+name+' '+json.loads(result.stdout)['sha'], flush=True)
+          PY2
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-kurd-movie-v17
