@@ -490,7 +490,7 @@ async function loadEpisodePicker(movie, session) {
     const selectedSeason = groups.some(group => group.season === (movie.season || 1)) ? movie.season || 1 : groups[0].season;
     season.value = String(selectedSeason);
     const setEpisodes = selected => {
-      episode.replaceChildren();
+      episode.textContent = '';
       const entries = groups.find(group => group.season === Number(season.value))?.episodes || [];
       for (const number of entries) episode.add(new Option(`ئەڵقەی ${number}`, String(number)));
       episode.value = String(entries.includes(selected) ? selected : entries[0]);
