@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[release-upload]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -333,6 +333,19 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
+  release-upload:
+    if: contains(github.event.head_commit.message, '[release-upload]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Upload verified signed APK to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/9e52050546926473d9122dbe87a1103e8837d3ee > /tmp/Kurd-Movie.apk
+          echo '375d4fba35161f49200b7593286ae4131caa11192630bd43a8d6a51328e28e75  /tmp/Kurd-Movie.apk' | sha256sum -c -
+          gh release upload kurd-movie-v17-new-key /tmp/Kurd-Movie.apk --repo s1po0/Movie-
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
