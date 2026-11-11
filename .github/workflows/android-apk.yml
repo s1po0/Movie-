@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -298,6 +298,15 @@ jobs:
           node-version: 22
       - run: npm ci && npm install --no-save --no-package-lock playwright-core
       - run: node scripts/tomb-live-check.mjs
+  tomb-network-check:
+    if: contains(github.event.head_commit.message, '[tomb-network-check]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && node scripts/tomb-subtitle-network-check.mjs
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
