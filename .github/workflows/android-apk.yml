@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[final-v18-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -359,48 +359,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-offline-check.mjs
-  final-v18-check:
-    if: contains(github.event.head_commit.message, '[final-v18-check]')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    permissions:
-      contents: write
-    steps:
-      - name: Retrieve exact v17 and v18 APKs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/9e52050546926473d9122dbe87a1103e8837d3ee > /tmp/old.apk
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/130700444855a1b808f72b5f1f55d4db3dfa1c1a > /tmp/Kurd-Movie.apk
-          echo '375d4fba35161f49200b7593286ae4131caa11192630bd43a8d6a51328e28e75  /tmp/old.apk' | sha256sum -c -
-          echo 'd6873128a9dbdee5217fe0eaf89012c86dce65dfd3a1347c516ab881f4a005a6  /tmp/Kurd-Movie.apk' | sha256sum -c -
-      - name: Enable hardware virtualization
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
-          script: |
-            adb root
-            adb wait-for-device
-            adb install /tmp/old.apk
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
-            adb install -r /tmp/Kurd-Movie.apk
-            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
-            adb shell dumpsys package app.dimo.movies | grep 'versionCode=18'
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell pidof app.dimo.movies
-            echo '::notice title=Real v17 to v18 upgrade::Exact signed APK upgraded in place and preserved private app data.'
-      - name: Upload tested APK to draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload kurd-movie-v18 /tmp/Kurd-Movie.apk --repo s1po0/Movie- --clobber
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
