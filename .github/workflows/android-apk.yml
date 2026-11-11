@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[oidc-probe]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -333,24 +333,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
-  oidc-probe:
-    if: contains(github.event.head_commit.message, '[oidc-probe]')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Inspect identity claims without exposing the token
-        run: |
-          python3 - <<'PY2'
-          import base64, json, os, urllib.request
-          req=urllib.request.Request(os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience=kurdmovie-probe',headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
-          token=json.load(urllib.request.urlopen(req,timeout=15))['value']
-          def part(i):
-            v=token.split('.')[i]; return json.loads(base64.urlsafe_b64decode(v+'='*(-len(v)%4)))
-          header, claims=part(0),part(1)
-          print('::notice title=Signing identity::'+json.dumps({k:claims.get(k) for k in ['iss','repository','ref','workflow_ref']} | {'kid':header.get('kid')}))
-          PY2
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
