@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[local-sign-build]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[local-sign-build]') && !contains(github.event.head_commit.message, '[signed-install-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -382,6 +382,36 @@ jobs:
           path: /tmp/offline-sign/
           if-no-files-found: error
           retention-days: 3
+  signed-install-check:
+    if: contains(github.event.head_commit.message, '[signed-install-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/9e52050546926473d9122dbe87a1103e8837d3ee > /tmp/kurd-movie.apk
+          echo '375d4fba35161f49200b7593286ae4131caa11192630bd43a8d6a51328e28e75  /tmp/kurd-movie.apk' | sha256sum -c -
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: |
+            adb install /tmp/kurd-movie.apk
+            adb shell dumpsys package app.dimo.movies | grep 'versionCode=17'
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
+            adb install -r /tmp/kurd-movie.apk
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
