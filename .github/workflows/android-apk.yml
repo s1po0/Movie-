@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[local-sign-build]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -333,6 +333,37 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
+  local-sign-build:
+    if: contains(github.event.head_commit.message, '[local-sign-build]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm test && npm run android:sync
+      - name: Build unsigned APK for offline signing
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease
+      - name: Collect unsigned APK and Android signing tool
+        run: |
+          mkdir -p /tmp/offline-sign
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/offline-sign/
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner.jar | sort -V | tail -1)
+          test -n "$signer"
+          cp "$signer" /tmp/offline-sign/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-kurd-movie-v17
+          path: /tmp/offline-sign/
+          if-no-files-found: error
+          retention-days: 3
   asian-live-check:
     if: contains(github.event.head_commit.message, '[asian-check]')
     runs-on: ubuntu-24.04
