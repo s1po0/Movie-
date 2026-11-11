@@ -2,8 +2,9 @@ import { chromium } from 'playwright-core';
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 try {
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 375, height: 812 }, { width: 844, height: 390 }]) {
     const page = await browser.newPage({ viewport });
+    if (viewport.width === 375) await page.emulateMedia({ reducedMotion: 'reduce' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('https://v3-cinemeta.strem.io/**', route => {
