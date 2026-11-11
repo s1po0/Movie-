@@ -30,7 +30,7 @@ public class UpdaterPlugin extends Plugin {
     public void download(PluginCall call) {
         String value = call.getString("url", "");
         Uri uri = Uri.parse(value);
-        if (!value.matches("https://github\\.com/s1po0/Movie-/releases/download/nali-v[1-9][0-9]*/Nali\\.apk") ||
+        if (!value.matches("https://github\\.com/s1po0/Movie-/releases/download/kurd-movie-v[1-9][0-9]*/Kurd-Movie\\.apk") ||
                 !"https".equals(uri.getScheme()) || !"github.com".equals(uri.getHost())) {
             call.reject("Invalid update URL");
             return;

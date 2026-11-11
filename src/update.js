@@ -5,12 +5,12 @@ export function findUpdate(releases, installedVersion) {
   let newest = null;
   for (const release of releases) {
     if (release?.draft) continue;
-    const match = /^nali-v([1-9]\d*)$/.exec(release?.tag_name || '');
+    const match = /^kurd-movie-v([1-9]\d*)$/.exec(release?.tag_name || '');
     if (!match) continue;
     const version = Number(match[1]);
     if (!Number.isSafeInteger(version) || version <= installedVersion || (newest && version <= newest.version)) continue;
-    const expected = `https://github.com/s1po0/Movie-/releases/download/nali-v${version}/Nali.apk`;
-    const apk = Array.isArray(release.assets) && release.assets.find(asset => asset.name === 'Nali.apk' && asset.state === 'uploaded' && asset.browser_download_url === expected);
+    const expected = `https://github.com/s1po0/Movie-/releases/download/kurd-movie-v${version}/Kurd-Movie.apk`;
+    const apk = Array.isArray(release.assets) && release.assets.find(asset => asset.name === 'Kurd-Movie.apk' && asset.state === 'uploaded' && asset.browser_download_url === expected);
     if (apk) newest = { version, url: expected };
   }
   return newest;
