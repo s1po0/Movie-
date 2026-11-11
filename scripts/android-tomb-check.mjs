@@ -13,9 +13,11 @@ try {
   const wait = async (name,fn,timeout=60000) => {const end=Date.now()+timeout;while(Date.now()<end){try{const result=await fn();if(result)return result;}catch{}await new Promise(r=>setTimeout(r,1000));}throw Error(`Timed out: ${name}`);};
   await send('Page.enable'); await send('Runtime.enable');
   await wait('app ready',()=>evaluate('Boolean(document.querySelector(\'[data-play="series-tomb-of-fallen-gods"]\'))'),30000);
+  const metaDiagnostic = await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','get',{url:'https://v3-cinemeta.strem.io/meta/series/tt31530980.json',responseType:'json',connectTimeout:10000,readTimeout:10000}).then(r=>({status:r.status, dataType:typeof r.data, id:r.data?.meta?.id || null, videos:r.data?.meta?.videos?.length || 0})).catch(e=>({error:String(e.message).slice(0,100)}))`);
+  console.log(`::notice title=Episode metadata diagnostic::${JSON.stringify(metaDiagnostic)}`);
   for (const season of [2,3]) {
     await evaluate(`document.querySelector('[data-play="series-tomb-of-fallen-gods"]').click()`);
-    await wait('season selector',()=>evaluate("Boolean(document.querySelector('select#episode-season'))"));
+    try { await wait('season selector',()=>evaluate("Boolean(document.querySelector('select#episode-season'))")); } catch (error) { console.log(`::notice title=Episode control diagnostic::${await evaluate("document.querySelector('.episode-controls')?.outerHTML || 'missing'")}`); throw error; }
     await evaluate(`{const s=document.querySelector('#episode-season');s.value='${season}';s.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-action=play-episode]').click()}`);
     await wait('selected episode',()=>evaluate(`document.querySelector('#player-modal iframe')?.src.includes('/tv/206343/${season}/1')`));
     const ready=await wait('translation',()=>evaluate("!document.querySelector('.embedded-menu-ready')?.classList.contains('hidden') ? 'ready' : /تەواو نەبوو|نەدۆزرایەوە/.test(document.querySelector('#embedded-subtitle-status')?.textContent || '') ? 'failed' : ''"),210000);
