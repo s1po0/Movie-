@@ -38,7 +38,7 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Makes a normal video and a separate matching subtitle in public Downloads/Kurd Movie. */
+/** Makes a normal video and a separate matching subtitle in public Movies/Kurd Movie. */
 @OptIn(markerClass = UnstableApi.class)
 final class SharedFileExport {
     private static Transformer active;
@@ -72,7 +72,7 @@ final class SharedFileExport {
                                     ? publishScoped(app, temporary, name, srt) : publishLegacy(app, temporary, name, srt);
                                 OfflinePlugin.exportFinished(app, id, true, name, video.toString());
                                 JSObject response = new JSObject(); response.put("saved", true);
-                                response.put("name", name); response.put("folder", "Download/Kurd Movie"); call.resolve(response);
+                                response.put("name", name); response.put("folder", "Movies/Kurd Movie"); call.resolve(response);
                             } catch (Exception error) {
                                 OfflinePlugin.exportFinished(app, id, false, null, null);
                                 if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.e("SeparateExportDebug", "Save failed", error);
@@ -118,7 +118,8 @@ final class SharedFileExport {
     private static Uri publishScoped(Context c, File file, String name, byte[] srt) throws Exception {
         ContentResolver resolver = c.getContentResolver(); Uri video = null, sub = null;
         try {
-            video = insert(resolver, name + ".mp4", "video/mp4"); sub = insert(resolver, name + ".srt", "application/x-subrip");
+            video = insert(resolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI, name + ".mp4", "video/mp4");
+            sub = insert(resolver, MediaStore.Files.getContentUri("external"), name + ".srt", "application/x-subrip");
             try (FileInputStream in = new FileInputStream(file); OutputStream out = resolver.openOutputStream(video, "w")) {
                 if (out == null) throw new IllegalStateException(); byte[] b = new byte[65536]; int n; while ((n=in.read(b)) != -1) out.write(b,0,n);
             }
@@ -130,13 +131,13 @@ final class SharedFileExport {
             if (video != null) resolver.delete(video,null,null); if (sub != null) resolver.delete(sub,null,null); throw error;
         }
     }
-    private static Uri insert(ContentResolver resolver, String name, String mime) {
+    private static Uri insert(ContentResolver resolver, Uri collection, String name, String mime) {
         ContentValues v = new ContentValues(); v.put(MediaStore.Downloads.DISPLAY_NAME,name); v.put(MediaStore.Downloads.MIME_TYPE,mime);
-        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Kurd Movie"); v.put(MediaStore.Downloads.IS_PENDING,1);
-        Uri result = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v); if (result == null) throw new IllegalStateException("Cannot create file"); return result;
+        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Kurd Movie"); v.put(MediaStore.Downloads.IS_PENDING,1);
+        Uri result = resolver.insert(collection,v); if (result == null) throw new IllegalStateException("Cannot create file"); return result;
     }
     @SuppressWarnings("deprecation") private static Uri publishLegacy(Context c, File file, String name, byte[] srt) throws Exception {
-        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kurd Movie");
+        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Kurd Movie");
         if (!folder.isDirectory() && !folder.mkdirs()) throw new IllegalStateException("Cannot create download directory");
         File video = new File(folder,name + ".mp4"), sub = new File(folder,name + ".srt");
         boolean createdVideo = false, createdSub = false;

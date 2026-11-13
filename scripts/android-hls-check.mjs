@@ -69,7 +69,7 @@ try {
   const shared = await evaluate(`window.Capacitor.nativePromise('Offline','exportFiles',${JSON.stringify({ id: item.id })})`);
   if (!shared?.saved || !shared.name) throw Error('Separate file export failed');
   console.log('::notice title=Separate export stage::Native export completed');
-  const base = `/sdcard/Download/Kurd Movie/${shared.name}`;
+  const base = `/sdcard/Movies/Kurd Movie/${shared.name}`;
   adb('pull', `${base}.mp4`, '/tmp/separate-video.mp4'); adb('pull', `${base}.srt`, '/tmp/separate-subtitle.srt');
   const { readFileSync } = await import('node:fs');
   const srt = readFileSync('/tmp/separate-subtitle.srt', 'utf8');
