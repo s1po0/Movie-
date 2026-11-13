@@ -19,13 +19,17 @@ try {
   await wait('direct player', () => evaluate("Boolean(document.querySelector('#subtitle-file'))"));
   await evaluate(`{ const input=document.querySelector('#subtitle-file'), dt=new DataTransfer(); dt.items.add(new File(['WEBVTT\\n\\n00:00:00.000 --> 00:00:20.000\\nسڵاو جیهان\\n'], 'kurdish.vtt', {type:'text/vtt'})); input.files=dt.files; input.dispatchEvent(new Event('change',{bubbles:true})); }`);
   await wait('subtitle loaded', () => evaluate("document.querySelector('#subtitle-status')?.textContent.includes('بارکرا')"));
-  await evaluate("document.querySelector('#original-is-kurdish').checked=true; document.querySelector('#offline-auto-export').checked=false; document.querySelector('[data-action=download-current]').click()");
+  await evaluate("document.querySelector('#original-is-kurdish').checked=true; document.querySelector('[data-action=download-current]').click()");
   await wait('download queued', () => evaluate("!document.querySelector('#modal').classList.contains('hidden') && Boolean(document.querySelector('#offline-list'))"));
   const id = await wait('download completed', async () => {
     const items = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");
     if (items[0]?.state === 'failed') throw Error('DownloadManager failed');
     return items[0]?.state === 'ready' && items[0].id;
   }, 240000);
+  await wait('automatic direct-file export', async () => {
+    const item = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id==='${id}'))`);
+    return item?.export === 'done';
+  }, 180000);
   // Disconnect both device transports before opening the downloaded file.
   execFileSync('adb', ['shell', 'svc', 'wifi', 'disable']); execFileSync('adb', ['shell', 'svc', 'data', 'disable']);
   await new Promise(r => setTimeout(r, 3000));
