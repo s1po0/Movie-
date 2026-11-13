@@ -1,5 +1,6 @@
 // Live integration diagnostic. Never print source, token or signed manifest URLs.
 import { execFileSync } from 'node:child_process';
+import { readFileSync, unlinkSync } from 'node:fs';
 let socket;
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8' });
 try {
@@ -35,11 +36,20 @@ try {
     if (row?.state === 'failed') throw Error('AnimeCube HLS download failed');
     return row?.state === 'ready' && row.id;
   }, 600000);
-  await wait('automatic separate export', async () => {
+  const exported = await wait('automatic separate export', async () => {
     const row = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id==='${id}'))`);
     if (row?.export === 'failed') throw Error('Automatic export failed');
-    return row?.export === 'done';
+    return row?.export === 'done' ? row : null;
   }, 600000);
+  const base = `/sdcard/Movies/Kurd Movie/${exported.exportName}`;
+  adb('pull', `${base}.mp4`, '/tmp/animecube-export.mp4');
+  adb('pull', `${base}.srt`, '/tmp/animecube-export.srt');
+  const srt = readFileSync('/tmp/animecube-export.srt','utf8');
+  if (!/[\u0600-\u06ff]/.test(srt) || (srt.match(/ --> /g) || []).length < 10) throw Error('Public SRT missing Sorani cues');
+  const metadata = JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type','-of','json','/tmp/animecube-export.mp4'],{encoding:'utf8'}));
+  if (!metadata.streams?.some(s=>s.codec_type==='video') || Number(metadata.format?.duration) < 10) throw Error('Public MP4 invalid');
+  unlinkSync('/tmp/animecube-export.mp4'); unlinkSync('/tmp/animecube-export.srt');
+  console.log('::notice title=Real public files::AnimeCube public MP4 and separate Sorani SRT verified');
   const saved = adb('shell','run-as','app.dimo.movies','cat',`files/offline-${id}.vtt`);
   if (!saved.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(saved) || (saved.match(/ --> /g) || []).length < 10) throw Error('Real translated Sorani subtitle was not saved');
   adb('shell','svc','wifi','disable'); adb('shell','svc','data','disable'); adb('logcat','-c');
@@ -48,5 +58,5 @@ try {
   console.log('::notice title=AnimeCube Android test::Season 3 episode 1 downloaded with its real translated subtitle; stored Sorani VTT and selected track verified offline.');
   adb('shell','input','keyevent','4');
   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id})})`);
-} catch (error) { console.log(`::error title=AnimeCube Android test::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
+} catch (error) { console.log(`::error title=AnimeCube Android test::${String(error.message).split('\n')[0]}`); try { for (const line of adb('logcat','-d','-s','SeparateExportDebug:E','*:S').split('\n').filter(line => /SeparateExportDebug/.test(line)).slice(-20)) console.log(`::error title=Export diagnostic::${line.slice(0,300)}`); } catch {} process.exitCode = 1; }
 finally { try { adb('shell','svc','wifi','enable'); adb('shell','svc','data','enable'); } catch {} socket?.close(); }

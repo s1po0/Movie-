@@ -82,6 +82,7 @@ final class SharedFileExport {
                     }
                     @Override public void onError(Composition composition, ExportResult result, ExportException error) {
                         temporary.delete(); active = null; GalleryExport.clear();
+                        if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.e("SeparateExportDebug", "Conversion failed", error);
                         OfflinePlugin.exportFinished(app, id, false, null, null); call.reject("Converting video failed", error);
                     }
                 }).build();
