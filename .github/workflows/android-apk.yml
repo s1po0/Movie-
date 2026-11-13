@@ -346,7 +346,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Build and test Android
+        run: |
+          npm ci && npm test && npm run android:sync
+          cd android
+          ./gradlew --no-daemon assembleDebug > /tmp/hls-gradle.log 2>&1 || {
+            grep -E -A 3 'error:|^FAILURE:|^\* What went wrong:|^\* Where:|Could not' /tmp/hls-gradle.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
       - name: Enable hardware virtualization
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
