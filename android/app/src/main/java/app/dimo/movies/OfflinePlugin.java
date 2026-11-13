@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.C;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -79,7 +80,11 @@ public final class OfflinePlugin extends Plugin {
         String title = call.getString("title", "").trim(), url = call.getString("url", ""), vtt = call.getString("subtitle", "");
         Uri uri = Uri.parse(url); String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(java.util.Locale.ROOT);
         String ext = path.endsWith(".mp4") ? "mp4" : path.endsWith(".webm") ? "webm" : "";
-        if (path.endsWith(".m3u8")) { startHls(call, title, uri, vtt); return; }
+        if (path.endsWith(".m3u8")) {
+            int maxHeight = call.getInt("maxHeight", 720);
+            if (maxHeight != 360 && maxHeight != 480 && maxHeight != 720) { call.reject("Invalid quality"); return; }
+            startHls(call, title, uri, vtt, maxHeight); return;
+        }
         if (title.isEmpty() || title.length() > 200 || !"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null || ext.isEmpty() || !vtt.startsWith("WEBVTT\n") || vtt.length() > 2_000_000) {
             call.reject("A direct HTTPS MP4/WebM and a subtitle are required"); return;
         }
@@ -102,7 +107,7 @@ public final class OfflinePlugin extends Plugin {
         }
     }
 
-    private void startHls(PluginCall call, String title, Uri uri, String vtt) {
+    private void startHls(PluginCall call, String title, Uri uri, String vtt, int maxHeight) {
         if (title.isEmpty() || title.length() > 200 || !"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null || !vtt.startsWith("WEBVTT\n") || vtt.length() > 2_000_000) {
             call.reject("An HTTPS HLS stream and a subtitle are required"); return;
         }
@@ -112,11 +117,18 @@ public final class OfflinePlugin extends Plugin {
             try {
                 MediaItem media = new MediaItem.Builder().setMediaId(id).setUri(uri).setMimeType(MimeTypes.APPLICATION_M3U8).build();
                 DownloadHelper helper = DownloadHelper.forMediaItem(media,
-                    DownloadHelper.getDefaultTrackSelectorParameters(c).buildUpon().setMaxVideoSize(1280, 720).setExceedVideoConstraintsIfNecessary(false).build(),
+                    DownloadHelper.getDefaultTrackSelectorParameters(c).buildUpon().setMaxVideoSize(Integer.MAX_VALUE, maxHeight).setExceedVideoConstraintsIfNecessary(false).build(),
                     new DefaultRenderersFactory(c), HlsDownloads.http());
                 helper.prepare(new DownloadHelper.Callback() {
                     @Override public void onPrepared(DownloadHelper prepared) {
                         try {
+                            boolean hasVideo = false;
+                            for (int p = 0; p < prepared.getPeriodCount(); p++) {
+                                androidx.media3.exoplayer.trackselection.MappingTrackSelector.MappedTrackInfo info = prepared.getMappedTrackInfo(p);
+                                for (int r = 0; r < info.getRendererCount(); r++)
+                                    if (info.getRendererType(r) == C.TRACK_TYPE_VIDEO && !prepared.getTrackSelections(p, r).isEmpty()) hasVideo = true;
+                            }
+                            if (!hasVideo) throw new IllegalStateException("No playable video at this quality");
                             DownloadRequest request = prepared.getDownloadRequest(null).copyWithId(id);
                             try (FileOutputStream out = new FileOutputStream(subtitle(c, id))) { out.write(vtt.getBytes(StandardCharsets.UTF_8)); }
                             JSONObject item = new JSONObject(); item.put("id", id); item.put("title", title); item.put("ext", "m3u8");
@@ -148,10 +160,20 @@ public final class OfflinePlugin extends Plugin {
                 JSObject row = new JSObject(); row.put("id", o.optString("id")); row.put("title", o.optString("title"));
                 if ("m3u8".equals(o.optString("ext"))) {
                     Download d = hlsDownload(c, o.optString("id"));
-                    if (d != null) { row.put("bytes", d.getBytesDownloaded()); row.put("total", d.contentLength); }
+                    row.put("kind", "hls");
+                    if (d != null) {
+                        row.put("bytes", d.getBytesDownloaded()); row.put("total", d.contentLength);
+                        float percentage = d.getPercentDownloaded();
+                        if (!Float.isNaN(percentage) && !Float.isInfinite(percentage) && percentage >= 0 && percentage <= 100) row.put("percent", percentage);
+                        if (d.state == Download.STATE_QUEUED) row.put("phase", "queued");
+                        else if (d.state == Download.STATE_STOPPED) row.put("phase", "paused");
+                    }
                     row.put("state", d == null ? "downloading" : d.state == Download.STATE_COMPLETED && subtitle(c, o.optString("id")).isFile() ? "ready" : d.state == Download.STATE_FAILED ? "failed" : "downloading");
                 } else {
+                    row.put("kind", "file");
                     int state = status(c, o, row);
+                    if (state == DownloadManager.STATUS_PENDING) row.put("phase", "queued");
+                    else if (state == DownloadManager.STATUS_PAUSED) row.put("phase", "paused");
                     row.put("state", complete(c, o) ? "ready" : state == DownloadManager.STATUS_FAILED || state == DownloadManager.STATUS_SUCCESSFUL ? "failed" : "downloading");
                 }
                 result.put(row);
@@ -178,9 +200,33 @@ public final class OfflinePlugin extends Plugin {
             } catch (Exception error) { call.reject("Offline item is unavailable", error); }
         }
     }
+    @PluginMethod public void exportGallery(PluginCall call) {
+        Context c = getContext(); String id = call.getString("id", "");
+        if (!safeId(id)) { call.reject("Invalid item"); return; }
+        getActivity().runOnUiThread(() -> {
+            synchronized (LOCK) {
+                try {
+                    JSONObject item = find(c, id);
+                    if (item == null || !subtitle(c, id).isFile()) throw new IllegalStateException();
+                    String ext = item.optString("ext"); boolean hls = "m3u8".equals(ext);
+                    MediaItem media;
+                    if (hls) {
+                        Download d = hlsDownload(c, id);
+                        if (d == null || d.state != Download.STATE_COMPLETED) throw new IllegalStateException();
+                        media = d.request.toMediaItem();
+                    } else {
+                        if (!complete(c, item)) throw new IllegalStateException();
+                        media = MediaItem.fromUri(Uri.fromFile(video(c, id, ext)));
+                    }
+                    GalleryExport.start(c, id, item.optString("title"), media, subtitle(c, id), hls, call);
+                } catch (Exception error) { call.reject("Offline item is unavailable", error); }
+            }
+        });
+    }
     @PluginMethod public void remove(PluginCall call) {
         Context c = getContext(); String id = call.getString("id", "");
         if (!safeId(id)) { call.reject("Invalid item"); return; }
+        if (GalleryExport.isExporting(id)) { call.reject("Gallery export in progress"); return; }
         synchronized (LOCK) {
             JSONArray a = entries(c), remaining = new JSONArray();
             for (int i = 0; i < a.length(); i++) {

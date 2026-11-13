@@ -1,6 +1,7 @@
 // Finite, unprotected AndroidX test stream with a separate Kurdish VTT.
 // Verify the native player is READY and renders a cue with networking disabled.
 import { execFileSync } from 'node:child_process';
+import { unlinkSync } from 'node:fs';
 let socket;
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8' });
 try {
@@ -38,9 +39,18 @@ try {
     return log.includes('ready') && log.includes('cues');
   }, 30000);
   adb('shell', 'input', 'keyevent', '4');
-  await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({ id: item.id })})`);
+  // Convert the cached stream offline and publish a real, playable MediaStore MP4.
+  const result = await evaluate(`window.Capacitor.nativePromise('Offline','exportGallery',${JSON.stringify({ id: item.id })})`);
+  if (!result?.saved) throw Error('Gallery export was not reported as saved');
+  const published = adb('shell', 'content', 'query', '--uri', 'content://media/external/video/media', '--projection', '_display_name:_size');
+  if (!published.includes('HLS offline test.mp4')) throw Error('MediaStore gallery item is missing');
+  adb('pull', '/sdcard/Movies/Kurd Movie/HLS offline test.mp4', '/tmp/kurd-hls-gallery-test.mp4');
+  const meta = JSON.parse(execFileSync('ffprobe', ['-v','error','-show_entries','format=duration:stream=codec_type,codec_name','-of','json','/tmp/kurd-hls-gallery-test.mp4'], {encoding:'utf8'}));
+  if (!meta.streams?.some(stream => stream.codec_type === 'video' && stream.codec_name === 'h264') || Number(meta.format?.duration) < 1) throw Error('Gallery video is not a playable MP4');
+  unlinkSync('/tmp/kurd-hls-gallery-test.mp4');
+  await evaluate(`window.Capacitor.nativePromise('Offline','remove' ,${JSON.stringify({ id: item.id })})`);
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");
   if (remaining.some(row => row.id === item.id)) throw Error('HLS deletion failed');
-  console.log('::notice title=Android HLS check::Downloaded an HLS fixture and verified native playback and subtitle cues with networking disabled.');
+  console.log('::notice title=Android HLS check::Downloaded HLS and verified offline subtitle playback and gallery MP4 export with networking disabled.');
 } catch (error) { console.log(`::error title=Android HLS check::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
 finally { try { adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable'); } catch {} socket?.close(); }
