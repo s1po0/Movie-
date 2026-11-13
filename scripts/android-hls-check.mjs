@@ -90,8 +90,9 @@ try {
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");
   if (remaining.some(row => row.id === item.id)) throw Error('HLS deletion failed');
   // Shared files must survive deletion of the app-private download.
-  const exists = adb('shell','ls', `${base}.mp4`, `${base}.srt`);
-  if (!exists.includes('.mp4') || !exists.includes('.srt')) throw Error('Public files removed with private item');
+  adb('pull', `${base}.mp4`, '/tmp/retained-video.mp4');
+  adb('pull', `${base}.srt`, '/tmp/retained-subtitle.srt');
+  unlinkSync('/tmp/retained-video.mp4'); unlinkSync('/tmp/retained-subtitle.srt');
   console.log('::notice title=Separate export stage::Public files survive deletion');
   // The one-click choice exports automatically when the download finishes while the dialog is open.
   adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable');
