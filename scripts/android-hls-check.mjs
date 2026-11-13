@@ -112,6 +112,8 @@ try {
     const lines = crash.split('\n').filter(line => /FATAL EXCEPTION|Caused by:|Exception:|at app\.dimo\.movies|at androidx\.media3/.test(line)).slice(0, 18);
     for (const line of lines) console.log(`::error title=Android crash::${line.slice(0, 300)}`);
     try { console.log(`::notice title=App process::${adb('shell','pidof','app.dimo.movies').trim()}`); } catch { console.log('::notice title=App process::No app process'); }
+    const exportLog = adb('logcat','-d','-s','SeparateExportDebug:E','*:S');
+    for (const line of exportLog.split('\n').filter(line=>/SeparateExportDebug/.test(line)).slice(-15)) console.log(`::error title=Export debug::${line.replace(/https?:\/\/\S+/g,'[url]').slice(0, 300)}`);
     const system = adb('logcat','-d','-t','800');
     const hints = system.split('\n').filter(line => /died|Killing|SIGSEGV|SIGABRT|OutOfMemory|low memory|Fatal signal/i.test(line)).slice(-15);
     for (const line of hints) console.log(`::error title=Android system::${line.replace(/https?:\/\/\S+/g,'[url]').slice(0, 300)}`);

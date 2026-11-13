@@ -74,7 +74,9 @@ final class SharedFileExport {
                                 JSObject response = new JSObject(); response.put("saved", true);
                                 response.put("name", name); response.put("folder", "Download/Kurd Movie"); call.resolve(response);
                             } catch (Exception error) {
-                                OfflinePlugin.exportFinished(app, id, false, null, null); call.reject("Saving files failed", error);
+                                OfflinePlugin.exportFinished(app, id, false, null, null);
+                                if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.e("SeparateExportDebug", "Save failed", error);
+                                call.reject("Saving files failed (" + error.getClass().getSimpleName() + ")", error);
                             } finally { temporary.delete(); active = null; GalleryExport.clear(); }
                         }, "shared-export-copy").start();
                     }
