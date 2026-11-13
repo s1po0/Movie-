@@ -105,5 +105,13 @@ try {
   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id:auto.id})})`);
 
   console.log('::notice title=Android HLS check::Downloaded HLS and verified offline playback, 360p, optional burned-in gallery MP4, separate movable MP4/SRT and automatic export with networking disabled.');
-} catch (error) { console.log(`::error title=Android HLS check::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
+} catch (error) {
+  console.log(`::error title=Android HLS check::${String(error.message).split('\n')[0]}`);
+  try {
+    const crash = adb('logcat', '-d', '-b', 'crash');
+    const lines = crash.split('\n').filter(line => /FATAL EXCEPTION|Caused by:|Exception:|at app\.dimo\.movies|at androidx\.media3/.test(line)).slice(0, 18);
+    for (const line of lines) console.log(`::error title=Android crash::${line.slice(0, 300)}`);
+  } catch {}
+  process.exitCode = 1;
+}
 finally { try { adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable'); } catch {} socket?.close(); }
