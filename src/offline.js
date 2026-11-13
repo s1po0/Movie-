@@ -1,9 +1,9 @@
-// Only direct, non-HLS HTTPS files can be handled by Android DownloadManager.
-// Embedded providers and encrypted/adaptive streams are deliberately excluded.
+// Direct HTTPS files and finite, non-DRM HLS streams are supported on Android.
+// Provider pages and protected streams are not direct media URLs.
 export function isOfflineDownloadable(url) {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && /\.(mp4|webm)$/i.test(parsed.pathname);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && /\.(mp4|webm|m3u8)$/i.test(parsed.pathname);
   } catch { return false; }
 }
 

@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UpdaterPlugin.class);
         registerPlugin(OfflinePlugin.class);
         super.onCreate(savedInstanceState);
+        HlsDownloads.manager(this);
         getBridge().getWebView().setWebViewClient(new SubtitleWebViewClient(getBridge()));
     }
 }
