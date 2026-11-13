@@ -22,8 +22,8 @@ try {
     throw Error(`Timed out: ${name}`);
   };
   const url = 'https://raw.githubusercontent.com/androidx/media/1.5.1/libraries/test_data/src/test/assets/media/hls/cea608/manifest.m3u8';
-  const subtitle = 'WEBVTT\n\n00:00:00.000 --> 00:00:02.300\nسڵاو جیهان\n';
-  const item = await evaluate(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({ title: 'HLS offline test', url, subtitle })})`);
+  const subtitle = 'WEBVTT\n\n00:00:00.000 --> 00:00:02.300\nKURD TEST\nسڵاو جیهان\n';
+  const item = await evaluate(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({ title: 'HLS offline test', url, subtitle, maxHeight: 360 })})`);
   await wait('HLS download completed', async () => {
     const { items } = await evaluate("window.Capacitor.nativePromise('Offline','list',{})");
     const row = items.find(row => row.id === item.id);
@@ -45,12 +45,15 @@ try {
   const published = adb('shell', 'content', 'query', '--uri', 'content://media/external/video/media', '--projection', '_display_name:_size');
   if (!published.includes('HLS offline test.mp4')) throw Error('MediaStore gallery item is missing');
   adb('pull', '/sdcard/Movies/Kurd Movie/HLS offline test.mp4', '/tmp/kurd-hls-gallery-test.mp4');
-  const meta = JSON.parse(execFileSync('ffprobe', ['-v','error','-show_entries','format=duration:stream=codec_type,codec_name','-of','json','/tmp/kurd-hls-gallery-test.mp4'], {encoding:'utf8'}));
-  if (!meta.streams?.some(stream => stream.codec_type === 'video' && stream.codec_name === 'h264') || Number(meta.format?.duration) < 1) throw Error('Gallery video is not a playable MP4');
-  unlinkSync('/tmp/kurd-hls-gallery-test.mp4');
+  const meta = JSON.parse(execFileSync('ffprobe', ['-v','error','-show_entries','format=duration:stream=codec_type,codec_name,height','-of','json','/tmp/kurd-hls-gallery-test.mp4'], {encoding:'utf8'}));
+  if (!meta.streams?.some(stream => stream.codec_type === 'video' && stream.codec_name === 'h264' && stream.height <= 360) || Number(meta.format?.duration) < 1) throw Error('Gallery video is not a playable MP4');
+  execFileSync('ffmpeg', ['-y','-v','error','-ss','0.5','-i','/tmp/kurd-hls-gallery-test.mp4','-frames:v','1','-vf','scale=1920:-1','/tmp/kurd-hls-frame.png']);
+  const ocr = execFileSync('tesseract', ['/tmp/kurd-hls-frame.png','stdout','--psm','6'], {encoding:'utf8', stdio:['ignore','pipe','ignore']});
+  if (!/KURD\s+TEST/i.test(ocr)) throw Error('Burned-in test subtitle not detected in gallery video');
+  unlinkSync('/tmp/kurd-hls-frame.png'); unlinkSync('/tmp/kurd-hls-gallery-test.mp4');
   await evaluate(`window.Capacitor.nativePromise('Offline','remove' ,${JSON.stringify({ id: item.id })})`);
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");
   if (remaining.some(row => row.id === item.id)) throw Error('HLS deletion failed');
-  console.log('::notice title=Android HLS check::Downloaded HLS and verified offline subtitle playback and gallery MP4 export with networking disabled.');
+  console.log('::notice title=Android HLS check::Downloaded HLS and verified offline subtitle playback, 360p selection and a burned-in subtitle in gallery MP4 with networking disabled.');
 } catch (error) { console.log(`::error title=Android HLS check::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
 finally { try { adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable'); } catch {} socket?.close(); }
