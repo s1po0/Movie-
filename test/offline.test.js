@@ -18,7 +18,7 @@ test('progress never invents a percentage and distinguishes HLS estimates', asyn
   const { offlineProgress } = await import('../src/offline.js');
   assert.deepEqual(offlineProgress({ kind: 'hls', bytes: 1048576, total: -1, percent: -1 }), { percent: null, text: '1.0 MiB' });
   assert.deepEqual(offlineProgress({ kind: 'hls', bytes: 1048576, percent: 25.15 }), { percent: 25.15, text: 'نزیکەی 25.1% · 1.0 MiB' });
-  assert.deepEqual(offlineProgress({ kind: 'file', bytes: 50, total: 100 }), { percent: 50, text: '50.0% · 0 KiB / 0 KiB' });
+  assert.deepEqual(offlineProgress({ kind: 'file', bytes: 50, total: 100 }), { percent: 50, text: '50.0% · 50 B / 100 B' });
   assert.equal(offlineProgress({ kind: 'hls', percent: 100 }).percent, 99.9);
   assert.equal(offlineProgress({ kind: 'hls', percent: NaN }).percent, null);
 });

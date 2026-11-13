@@ -660,7 +660,7 @@ async function translateCues(forcedTarget) {
     const translated = parseSubtitles(vtt);
     if (translated.length !== originalCues.length) throw new Error('Incomplete translation');
     translations[target] = translated; installCues(translated, `Google · ${target}`, 'translated');
-    show('وەرگێڕانی سۆرانی تەواو بوو.'); document.querySelector('#subtitle-status').textContent = `وەرگێڕدراوە بۆ ${target}`;
+    show(target === 'ckb' ? 'وەرگێڕانی سۆرانی تەواو بوو.' : `وەرگێڕان بۆ ${target} تەواو بوو.`); document.querySelector('#subtitle-status').textContent = `وەرگێڕدراوە بۆ ${target}`;
     return true;
   } catch (error) { if (stillCurrent()) show('وەرگێڕان تەواو نەبوو؛ دابەزاندن وەستێنرا. ئینتەرنێت بپشکنە و دووبارە هەوڵ بدە.'); return false; }
   finally { if (session === playerSession) { button.disabled = false; if (version !== subtitleVersion) show('ژێرنووسەکە گۆڕدرا؛ دووبارە وەرگێڕان دەست پێ بکە.'); } }

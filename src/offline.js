@@ -17,7 +17,7 @@ export function offlineSubtitle(translations, original, originalIsKurdish) {
 export function offlineProgress(item) {
   const bytes = Number.isFinite(item?.bytes) && item.bytes >= 0 ? item.bytes : null;
   const total = Number.isFinite(item?.total) && item.total > 0 ? item.total : null;
-  const size = n => n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KiB` : `${(n / (1024 * 1024)).toFixed(1)} MiB`;
+  const size = n => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KiB` : `${(n / (1024 * 1024)).toFixed(1)} MiB`;
   let percent = null;
   if (item?.kind === 'hls' && Number.isFinite(item.percent) && item.percent >= 0 && item.percent <= 100) percent = item.percent;
   else if (item?.kind !== 'hls' && bytes !== null && total !== null) percent = bytes / total * 100;
