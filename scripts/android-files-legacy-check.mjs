@@ -19,7 +19,6 @@ try {
   const wait = async (name, fn, timeout=120000) => {
     const end=Date.now()+timeout; while(Date.now()<end) { const value=await fn(); if(value) return value; await new Promise(r=>setTimeout(r,1000)); } throw Error(`Timed out: ${name}`);
   };
-  adb('shell','pm','grant','app.dimo.movies','android.permission.WRITE_EXTERNAL_STORAGE');
   const url='https://raw.githubusercontent.com/androidx/media/1.5.1/libraries/test_data/src/test/assets/media/hls/cea608/manifest.m3u8';
   const subtitle='WEBVTT\n\n00:00:00.000 --> 00:00:02.300\nسڵاو جیهان\n';
   const item=await evalJS(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({title:'Legacy export',url,subtitle,maxHeight:360})})`);
