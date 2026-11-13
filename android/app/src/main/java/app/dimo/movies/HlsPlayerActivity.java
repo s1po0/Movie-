@@ -38,7 +38,7 @@ public final class HlsPlayerActivity extends Activity {
             DefaultDataSource.Factory localOnly = new DefaultDataSource.Factory(this, PlaceholderDataSource.FACTORY);
             CacheDataSource.Factory data = new CacheDataSource.Factory().setCache(HlsDownloads.cache(this)).setUpstreamDataSourceFactory(localOnly);
             player = new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
-            if (BuildConfig.DEBUG) player.addListener(new Player.Listener() {
+            if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) player.addListener(new Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) { if (state == Player.STATE_READY) Log.i("HlsOfflineCheck", "ready"); }
                 @Override public void onCues(CueGroup group) { if (!group.cues.isEmpty()) Log.i("HlsOfflineCheck", "cues"); }
             });
