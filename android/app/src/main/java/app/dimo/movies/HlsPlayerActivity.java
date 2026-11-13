@@ -5,6 +5,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import androidx.media3.common.Player;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.C;
 import androidx.media3.common.text.CueGroup;
 import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
@@ -38,8 +40,14 @@ public final class HlsPlayerActivity extends Activity {
             DefaultDataSource.Factory localOnly = new DefaultDataSource.Factory(this, PlaceholderDataSource.FACTORY);
             CacheDataSource.Factory data = new CacheDataSource.Factory().setCache(HlsDownloads.cache(this)).setUpstreamDataSourceFactory(localOnly);
             player = new ExoPlayer.Builder(this).setMediaSourceFactory(new DefaultMediaSourceFactory(data)).build();
+            player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setPreferredTextLanguage("ckb").build());
             if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) player.addListener(new Player.Listener() {
                 @Override public void onPlaybackStateChanged(int state) { if (state == Player.STATE_READY) Log.i("HlsOfflineCheck", "ready"); }
+                @Override public void onTracksChanged(Tracks tracks) {
+                    for (Tracks.Group group : tracks.getGroups()) for (int i = 0; i < group.length; i++) {
+                        if (group.getType() == C.TRACK_TYPE_TEXT && group.isTrackSelected(i) && "ckb".equals(group.getTrackFormat(i).language)) Log.i("HlsOfflineCheck", "sorani-track");
+                    }
+                }
                 @Override public void onCues(CueGroup group) { if (!group.cues.isEmpty()) Log.i("HlsOfflineCheck", "cues"); }
             });
             PlayerView view = new PlayerView(this); view.setPlayer(player); setContentView(view);

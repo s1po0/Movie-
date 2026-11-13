@@ -260,14 +260,23 @@ async function offlineDialog() {
 }
 async function downloadCurrent() {
   const button = document.querySelector('[data-action="download-current"]');
-  if (!current || !button || !nativeOfflineAvailable()) return;
+  if (!current || !button || !nativeOfflineAvailable() || button.disabled) return;
   const url = current.url || document.querySelector('#video')?.currentSrc || '';
   if (!isOfflineDownloadable(url)) { toast('تەنها MP4، WebM یان HLSی ڕاستەوخۆ دابەزێنرێت.'); return; }
-  const cues = offlineSubtitle(translations, originalCues, document.querySelector('#original-is-kurdish')?.checked);
-  if (!cues) { toast('سەرەتا ژێرنووس بۆ کوردی وەربگێڕە یان ژێرنووسی کوردی بار بکە.'); return; }
+  const session = playerSession;
   button.disabled = true;
-  try { await Offline.start({ title: current.title, url, subtitle: toVtt(cues) }); closePlayer(); offlineDialog(); }
-  catch { toast('دابەزاندن دەست پێ نەکرد؛ لینک و شوێنی بەتاڵ بپشکنە.'); }
+  try {
+    let cues = offlineSubtitle(translations, originalCues, document.querySelector('#original-is-kurdish')?.checked);
+    if (!cues && current.autoTranslateForOffline && originalCues?.length) {
+      const status = document.querySelector('#offline-translation-status');
+      if (status) status.textContent = 'وەرگێڕانی ژێرنووس بۆ سۆرانی...';
+      if (!await translateCues('ckb') || session !== playerSession) return;
+      cues = offlineSubtitle(translations, originalCues, false);
+    }
+    if (!cues) { toast('ژێرنووس بەردەست نییە یان وەرگێڕان تەواو نەبوو؛ دابەزاندن دەست پێ نەکرا.'); return; }
+    await Offline.start({ title: current.title, url, subtitle: toVtt(cues) });
+    if (session === playerSession) { closePlayer(); offlineDialog(); }
+  } catch { if (session === playerSession) toast('دابەزاندن دەست پێ نەکرد؛ لینک و شوێنی بەتاڵ بپشکنە.'); }
   finally { if (button.isConnected) button.disabled = false; }
 }
 
@@ -285,7 +294,7 @@ async function openAnimeCubeSource() {
     if (session !== playerSession) return;
     const title = `${current.title} · S03E${String(episode).padStart(2, '0')}`;
     closePlayer();
-    openPlayer({ id: `animecube-s3-${episode}`, title, url: media.streamUrl, subtitle: media.subtitleUrl || '' });
+    openPlayer({ id: `animecube-s3-${episode}`, title, url: media.streamUrl, subtitle: media.subtitleUrl || '', autoTranslateForOffline: true });
     toast('سەرچاوە دۆزرایەوە؛ دابەزاندن بەردەستبوونی ستریمەکە پێویستە.');
   } catch {
     if (session === playerSession) toast('سەرچاوەی AnimeCube نەدۆزرایەوە یان پارێزراوە.');
@@ -580,7 +589,7 @@ function openPlayer(movie) {
     });
     return;
   }
-  modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><video id="video" controls playsinline></video></div><div id="player-message" class="player-message">${movie.credit ? `${escapeHtml(movie.credit)}${movie.attributionUrl ? ` · <a href="${escapeHtml(movie.attributionUrl)}" target="_blank" rel="noopener noreferrer">HLS attribution ↗</a>` : ''} · <a href="${escapeHtml(movie.licenseUrl || `https://creativecommons.org/licenses/${movie.id === 'sample-dream' ? 'by/2.5/' : 'by/3.0/'}`)}" target="_blank" rel="noopener noreferrer">License ↗</a>` : movie.sourcePage ? `Internet Archive · <a href="${escapeHtml(movie.sourcePage)}" target="_blank" rel="noopener noreferrer">سەرچاوە ↗</a>` : 'ئەگەر ستریمەکە کار نەکرد، لینک و ئینتەرنێت بپشکنە.'}</div><div class="offline-save-panel ${movie.offlineSubtitle ? 'hidden' : ''}"><div><strong>${icon('download')} دابەزاندن بۆ ئۆفلاین</strong><p>بۆ MP4 / WebM / HLSی ڕاستەوخۆ، یەکەم ژێرنووس بۆ سۆرانی وەربگێڕە یان ژێرنووسی کوردی بار بکە.</p><label class="offline-check"><input id="original-is-kurdish" type="checkbox"> ژێرنووسی بارکراو کوردییە</label></div><button class="ghost" type="button" data-action="download-current" ${!nativeOfflineAvailable() ? 'disabled' : ''}>${icon('download')} دابەزاندن</button></div><div class="subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>ژێرنووس</h3><p id="subtitle-status">ژێرنووسێک هەڵبژێرە یان بار بکە</p></div></div><label class="upload-button">${icon('upload')} بارکردنی فایل<input id="subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label id="subtitle-source-label" class="hidden">فایلی ژێرنووسی فیلم<select id="subtitle-source"><option value="">ژێرنووس هەڵبژێرە</option></select></label><label>ژێرنووسی بەردەست<select id="track-select"><option value="off">کوژاندنەوە</option></select></label><label>زمانی وەرگێڕان<select id="language">${languages.map(([code, name]) => `<option value="${code}">${escapeHtml(name)}</option>`).join('')}<option value="custom">زمانێکی تر…</option></select></label><label id="custom-language-label" class="hidden">کۆدی زمان <input id="custom-language" dir="ltr" placeholder="e.g. it"></label></div><details class="translate-details"><summary>${icon('languages')} وەرگێڕانی ژێرنووس بە Google</summary><p>فایلی ژێرنووس بار بکە و زمان هەڵبژێرە. وەرگێڕان بەخۆڕاییە و پێویستی بە کلیل نییە؛ ژێرنووسەکان بۆ Google دەنێردرێن.</p><div class="translate-row"><button class="primary" id="translate">${icon('sparkles')} وەرگێڕان</button></div><p id="translation-status" class="form-hint" role="status"></p></details></div></div>`;
+  modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap"><video id="video" controls playsinline></video></div><div id="player-message" class="player-message">${movie.credit ? `${escapeHtml(movie.credit)}${movie.attributionUrl ? ` · <a href="${escapeHtml(movie.attributionUrl)}" target="_blank" rel="noopener noreferrer">HLS attribution ↗</a>` : ''} · <a href="${escapeHtml(movie.licenseUrl || `https://creativecommons.org/licenses/${movie.id === 'sample-dream' ? 'by/2.5/' : 'by/3.0/'}`)}" target="_blank" rel="noopener noreferrer">License ↗</a>` : movie.sourcePage ? `Internet Archive · <a href="${escapeHtml(movie.sourcePage)}" target="_blank" rel="noopener noreferrer">سەرچاوە ↗</a>` : 'ئەگەر ستریمەکە کار نەکرد، لینک و ئینتەرنێت بپشکنە.'}</div><div class="offline-save-panel ${movie.offlineSubtitle ? 'hidden' : ''}"><div><strong>${icon('download')} دابەزاندن بۆ ئۆفلاین</strong><p>بۆ MP4 / WebM / HLSی ڕاستەوخۆ، یەکەم ژێرنووس بۆ سۆرانی وەربگێڕە یان ژێرنووسی کوردی بار بکە.</p><p id="offline-translation-status" class="form-hint" role="status"></p><label class="offline-check"><input id="original-is-kurdish" type="checkbox"> تەنها ئەگەر فایلی ژێرنووسەکە بەڕاستی کوردییە</label></div><button class="ghost" type="button" data-action="download-current" ${!nativeOfflineAvailable() ? 'disabled' : ''}>${icon('download')} دابەزاندن</button></div><div class="subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>ژێرنووس</h3><p id="subtitle-status">ژێرنووسێک هەڵبژێرە یان بار بکە</p></div></div><label class="upload-button">${icon('upload')} بارکردنی فایل<input id="subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label id="subtitle-source-label" class="hidden">فایلی ژێرنووسی فیلم<select id="subtitle-source"><option value="">ژێرنووس هەڵبژێرە</option></select></label><label>ژێرنووسی بەردەست<select id="track-select"><option value="off">کوژاندنەوە</option></select></label><label>زمانی وەرگێڕان<select id="language">${languages.map(([code, name]) => `<option value="${code}">${escapeHtml(name)}</option>`).join('')}<option value="custom">زمانێکی تر…</option></select></label><label id="custom-language-label" class="hidden">کۆدی زمان <input id="custom-language" dir="ltr" placeholder="e.g. it"></label></div><details class="translate-details"><summary>${icon('languages')} وەرگێڕانی ژێرنووس بە Google</summary><p>فایلی ژێرنووس بار بکە و زمان هەڵبژێرە. وەرگێڕان بەخۆڕاییە و پێویستی بە کلیل نییە؛ ژێرنووسەکان بۆ Google دەنێردرێن.</p><div class="translate-row"><button class="primary" id="translate">${icon('sparkles')} وەرگێڕان</button></div><p id="translation-status" class="form-hint" role="status"></p></details></div></div>`;
   modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
   const video = document.querySelector('#video');
   video.addEventListener('error', () => { document.querySelector('#player-message').textContent = 'ستریمەکە کار نەکرد. لینک، ئینتەرنێت و پشتگیری فرۆمات بپشکنە.'; });
@@ -623,40 +632,39 @@ async function loadSubtitleUrl(url) {
   const session = playerSession, requestId = ++subtitleRequest;
   try { let text; if (Capacitor.isNativePlatform()) { const result = await CapacitorHttp.get({ url, responseType: 'text' }); if (result.status < 200 || result.status >= 300) throw new Error(); text = result.data; } else { const response = await fetch(url); if (!response.ok) throw new Error(); text = await response.text(); } if (session === playerSession && requestId === subtitleRequest) loadSubtitle(text); } catch { if (session === playerSession && requestId === subtitleRequest) document.querySelector('#subtitle-status').textContent = 'ژێرنووس بار نەبوو؛ لینکەکە بپشکنە یان فایل بار بکە.'; }
 }
-async function translateCues() {
+async function translateCues(forcedTarget) {
   const status = document.querySelector('#translation-status'), button = document.querySelector('#translate');
-  const selection = document.querySelector('#language').value, target = selection === 'custom' ? document.querySelector('#custom-language').value.trim() : selection;
-  if (!originalCues) { status.textContent = 'سەرەتا فایلی ژێرنووس بار بکە.'; return; }
-  if (!/^[a-zA-Z]{2,3}(?:-[a-zA-Z]{2,4})?$/.test(target)) { status.textContent = 'کۆدی زمانێکی دروست بنووسە.'; return; }
-  if (translations[target]) { installCues(translations[target], `Google · ${target}`, 'translated'); status.textContent = 'وەرگێڕان ئامادەیە.'; return; }
+  const selection = document.querySelector('#language').value;
+  const target = forcedTarget || (selection === 'custom' ? document.querySelector('#custom-language').value.trim() : selection);
+  const offlineStatus = document.querySelector('#offline-translation-status');
+  const show = text => { if (status) status.textContent = text; if (forcedTarget && offlineStatus) offlineStatus.textContent = text; };
+  if (!originalCues) { show('سەرەتا فایلی ژێرنووس بار بکە.'); return false; }
+  if (!/^[a-zA-Z]{2,3}(?:-[a-zA-Z]{2,4})?$/.test(target)) { show('کۆدی زمانێکی دروست بنووسە.'); return false; }
+  if (translations[target]) { installCues(translations[target], `Google · ${target}`, 'translated'); show('وەرگێڕان ئامادەیە.'); return true; }
   const session = playerSession, version = subtitleVersion; button.disabled = true;
   const stillCurrent = () => session === playerSession && version === subtitleVersion;
   try {
-    const groups = translationGroups(originalCues), translated = [];
     const request = async text => {
       if (!stillCurrent()) throw new Error('Translation cancelled');
-      const url = translationUrl(text, target); let data;
-      if (Capacitor.isNativePlatform()) {
-        const res = await CapacitorHttp.get({ url, responseType: 'json' });
-        if (res.status < 200 || res.status >= 300) throw new Error(`Google HTTP ${res.status}`);
-        data = res.data;
-      } else {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Google HTTP ${res.status}`);
-        data = await res.json();
-      }
-      return translatedText(data);
+      if (Capacitor.isNativePlatform()) return googleTranslateForMenu(text, target);
+      const response = await fetch(translationUrl(text, target));
+      if (!response.ok) throw new Error(`Google HTTP ${response.status}`);
+      return translatedText(await response.json());
     };
-    for (let i = 0; i < groups.length; i++) {
-      if (!stillCurrent()) return;
-      status.textContent = `وەرگێڕان... ${i + 1} / ${groups.length}`;
-      translated.push(...await translateGroup(groups[i], request));
-    }
-    if (!stillCurrent()) return;
-    translations[target] = translated; installCues(translated, `Google · ${target}`, 'translated'); status.textContent = 'وەرگێڕان تەواو بوو.'; document.querySelector('#subtitle-status').textContent = `وەرگێڕدراوە بۆ ${target}`;
-  } catch (error) { if (stillCurrent()) status.textContent = `وەرگێڕان سەرکەوتوو نەبوو: ${error.message}`; }
-  finally { if (session === playerSession) { button.disabled = false; if (version !== subtitleVersion) status.textContent = 'ژێرنووسەکە گۆڕدرا؛ دووبارە وەرگێڕان دەست پێ بکە.'; } }
+    const vtt = await translateMenuSubtitles(toVtt(originalCues), request, {
+      isCurrent: stillCurrent,
+      onProgress: (done, total) => show(`وەرگێڕانی Google... ${done} / ${total}`),
+    });
+    if (!stillCurrent()) return false;
+    const translated = parseSubtitles(vtt);
+    if (translated.length !== originalCues.length) throw new Error('Incomplete translation');
+    translations[target] = translated; installCues(translated, `Google · ${target}`, 'translated');
+    show('وەرگێڕانی سۆرانی تەواو بوو.'); document.querySelector('#subtitle-status').textContent = `وەرگێڕدراوە بۆ ${target}`;
+    return true;
+  } catch (error) { if (stillCurrent()) show('وەرگێڕان تەواو نەبوو؛ دابەزاندن وەستێنرا. ئینتەرنێت بپشکنە و دووبارە هەوڵ بدە.'); return false; }
+  finally { if (session === playerSession) { button.disabled = false; if (version !== subtitleVersion) show('ژێرنووسەکە گۆڕدرا؛ دووبارە وەرگێڕان دەست پێ بکە.'); } }
 }
+
 app.addEventListener('click', e => {
   const action = e.target.closest('[data-action]')?.dataset.action;
   const timing = e.target.closest('[data-subtitle-offset]');

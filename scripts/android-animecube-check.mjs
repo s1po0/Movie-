@@ -25,9 +25,9 @@ try {
   await evaluate("{ const s=document.querySelector('#episode-season'); s.value='3'; s.dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('#episode-number').value='1'; document.querySelector('[data-action=animecube-source]').click(); }");
   const source = await wait('AnimeCube source', () => evaluate("document.querySelector('#subtitle-file') ? 'ready' : (!document.querySelector('.toast')?.classList.contains('hidden') && document.querySelector('.toast')?.textContent.includes('نەدۆزرایەوە')) ? 'failed' : ''"));
   if (source !== 'ready') throw Error('AnimeCube or Dailymotion source unavailable');
-  await evaluate(`{ const input=document.querySelector('#subtitle-file'), dt=new DataTransfer(); dt.items.add(new File(['WEBVTT\\n\\n00:00:00.000 --> 00:00:10.000\\nتاقیکردنەوە\\n'], 'test.vtt', {type:'text/vtt'})); input.files=dt.files; input.dispatchEvent(new Event('change',{bubbles:true})); }`);
-  await wait('test subtitle loaded', () => evaluate("document.querySelector('#subtitle-status')?.textContent.includes('بارکرا')"));
-  await evaluate("document.querySelector('#original-is-kurdish').checked=true; document.querySelector('[data-action=download-current]').click()");
+  await wait('real English subtitle', () => evaluate("document.querySelector('#subtitle-status')?.textContent.includes('بارکرا')"), 90000);
+  // Do not inject or confirm a fabricated subtitle: the app must translate the real source.
+  await evaluate("document.querySelector('[data-action=download-current]').click()");
   await wait('download queued', () => evaluate("Boolean(document.querySelector('#offline-list'))"), 120000);
   const id = await wait('AnimeCube download', async () => {
     const {items} = await evaluate("window.Capacitor.nativePromise('Offline','list',{})");
@@ -35,10 +35,12 @@ try {
     if (row?.state === 'failed') throw Error('AnimeCube HLS download failed');
     return row?.state === 'ready' && row.id;
   }, 600000);
+  const saved = adb('shell','run-as','app.dimo.movies','cat',`files/offline-${id}.vtt`);
+  if (!saved.startsWith('WEBVTT') || !/[\u0600-\u06ff]/.test(saved) || (saved.match(/ --> /g) || []).length < 10) throw Error('Real translated Sorani subtitle was not saved');
   adb('shell','svc','wifi','disable'); adb('shell','svc','data','disable'); adb('logcat','-c');
   await evaluate(`window.Capacitor.nativePromise('Offline','open',${JSON.stringify({id})})`);
-  await wait('offline player ready', () => adb('logcat','-d','-s','HlsOfflineCheck:I','*:S').includes('ready'), 45000);
-  console.log('::notice title=AnimeCube Android test::Season 3 episode 1 downloaded and the offline player reached ready with networking disabled; test subtitle is synthetic.');
+  await wait('offline player and selected Sorani track', () => { const logs = adb('logcat','-d','-s','HlsOfflineCheck:I','*:S'); return logs.includes('ready') && logs.includes('sorani-track'); }, 45000);
+  console.log('::notice title=AnimeCube Android test::Season 3 episode 1 downloaded with its real translated subtitle; stored Sorani VTT and selected track verified offline.');
   adb('shell','input','keyevent','4');
   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id})})`);
 } catch (error) { console.log(`::error title=AnimeCube Android test::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
