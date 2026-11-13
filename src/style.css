@@ -84,4 +84,4 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
   .mobile-nav a:first-child{color:#bfb5ff}.mobile-nav svg{width:19px;height:19px}
 }
 /* Keep download controls usable on narrow phones without hiding progress. */
-.offline-row{flex-wrap:wrap;gap:8px}.offline-row .saved-title{flex:1 1 100%}.offline-row [data-offline-translate],.offline-row [data-offline-export]{flex:1 1 auto;min-height:44px;font-size:12px}.offline-row progress{width:100%;height:7px;accent-color:#8de4d7}
+.offline-row{flex-wrap:wrap;gap:8px}.offline-row .saved-title{flex:1 1 100%}.offline-row [data-offline-translate],.offline-row [data-offline-export],.offline-row [data-offline-files],.offline-row [data-offline-external]{flex:1 1 auto;min-height:44px;font-size:12px}.offline-row progress{width:100%;height:7px;accent-color:#8de4d7}

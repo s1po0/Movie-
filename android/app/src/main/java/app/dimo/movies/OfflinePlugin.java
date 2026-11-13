@@ -1,6 +1,8 @@
 package app.dimo.movies;
 
 import android.app.DownloadManager;
+import android.Manifest;
+import android.os.Build;
 import android.content.Context;
 import android.content.Intent;
 import androidx.annotation.OptIn;
@@ -24,6 +26,9 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -36,7 +41,7 @@ import java.util.UUID;
 
 /** Downloads direct media and unprotected, finite HLS streams. */
 @OptIn(markerClass = UnstableApi.class)
-@CapacitorPlugin(name = "Offline")
+@CapacitorPlugin(name = "Offline", permissions = { @Permission(alias = "legacyStorage", strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }) })
 public final class OfflinePlugin extends Plugin {
     private static final String PREFS = "offline-v1";
     private static final Object LOCK = new Object();
@@ -98,7 +103,7 @@ public final class OfflinePlugin extends Plugin {
                 req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
                 req.setDestinationInExternalFilesDir(c, Environment.DIRECTORY_DOWNLOADS, "offline-" + id + "." + ext);
                 downloadId = manager(c).enqueue(req);
-                JSONObject item = new JSONObject(); item.put("id", id); item.put("title", title); item.put("ext", ext); item.put("downloadId", downloadId);
+                JSONObject item = new JSONObject(); item.put("id", id); item.put("title", title); item.put("ext", ext); item.put("downloadId", downloadId); item.put("export", call.getBoolean("autoExport", false) ? "pending" : "none");
                 JSONArray all = entries(c); all.put(item); save(c, all);
                 JSObject result = new JSObject(); result.put("id", id); call.resolve(result);
             } catch (Exception error) {
@@ -132,7 +137,7 @@ public final class OfflinePlugin extends Plugin {
                             if (!hasVideo) throw new IllegalStateException("No playable video at this quality");
                             DownloadRequest request = prepared.getDownloadRequest(null).copyWithId(id);
                             try (FileOutputStream out = new FileOutputStream(subtitle(c, id))) { out.write(vtt.getBytes(StandardCharsets.UTF_8)); }
-                            JSONObject item = new JSONObject(); item.put("id", id); item.put("title", title); item.put("ext", "m3u8");
+                            JSONObject item = new JSONObject(); item.put("id", id); item.put("title", title); item.put("ext", "m3u8"); item.put("export", call.getBoolean("autoExport", false) ? "pending" : "none");
                             synchronized (LOCK) { JSONArray all = entries(c); all.put(item); save(c, all); }
                             DownloadService.sendAddDownload(c, HlsDownloadService.class, request, false);
                             JSObject result = new JSObject(); result.put("id", id); call.resolve(result);
@@ -159,6 +164,7 @@ public final class OfflinePlugin extends Plugin {
             for (int i = a.length() - 1; i >= 0; i--) {
                 JSONObject o = a.optJSONObject(i); if (o == null || !safeId(o.optString("id"))) continue;
                 JSObject row = new JSObject(); row.put("id", o.optString("id")); row.put("title", o.optString("title"));
+                row.put("export", o.optString("export", "none")); row.put("exportName", o.optString("exportName", ""));
                 if ("m3u8".equals(o.optString("ext"))) {
                     Download d = hlsDownload(c, o.optString("id"));
                     row.put("kind", "hls");
@@ -222,9 +228,73 @@ public final class OfflinePlugin extends Plugin {
         synchronized (LOCK) {
             if (find(c, id) == null || GalleryExport.isExporting(id)) { call.reject("Item is unavailable or being exported"); return; }
             AtomicFile file = new AtomicFile(subtitle(c, id)); FileOutputStream out = null;
-            try { out = file.startWrite(); out.write(vtt.getBytes(StandardCharsets.UTF_8)); file.finishWrite(out); call.resolve(); }
+            try {
+                out = file.startWrite(); out.write(vtt.getBytes(StandardCharsets.UTF_8)); file.finishWrite(out);
+                JSONArray a = entries(c); for (int i = 0; i < a.length(); i++) { JSONObject item = a.optJSONObject(i); if (item != null && id.equals(item.optString("id")) && "done".equals(item.optString("export"))) item.put("export", "stale"); }
+                save(c, a); call.resolve();
+            }
             catch (Exception error) { if (out != null) file.failWrite(out); call.reject("Subtitle could not be saved", error); }
         }
+    }
+    static void exportFinished(Context c, String id, boolean success, String name, String uri) {
+        synchronized (LOCK) {
+            JSONArray a = entries(c);
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject item = a.optJSONObject(i); if (item == null || !id.equals(item.optString("id"))) continue;
+                try {
+                    item.put("export", success ? "done" : "failed");
+                    if (success) { item.put("exportName", name); item.put("exportUri", uri); }
+                    save(c, a);
+                } catch (Exception ignored) { }
+                break;
+            }
+        }
+    }
+    @PluginMethod public void exportFiles(PluginCall call) {
+        String id = call.getString("id", "");
+        if (!safeId(id)) { call.reject("Invalid item"); return; }
+        if (Build.VERSION.SDK_INT < 29 && getPermissionState("legacyStorage") != PermissionState.GRANTED) {
+            requestPermissionForAlias("legacyStorage", call, "legacyStorageResult"); return;
+        }
+        startSharedExport(call);
+    }
+    @PermissionCallback private void legacyStorageResult(PluginCall call) {
+        if (getPermissionState("legacyStorage") == PermissionState.GRANTED) startSharedExport(call);
+        else { exportFinished(getContext(), call.getString("id", ""), false, null, null); call.reject("Storage permission denied"); }
+    }
+    private void startSharedExport(PluginCall call) {
+        Context c = getContext(); String id = call.getString("id", "");
+        getActivity().runOnUiThread(() -> {
+            synchronized (LOCK) {
+                try {
+                    JSONObject item = find(c, id);
+                    if (item == null || !subtitle(c, id).isFile()) throw new IllegalStateException();
+                    String ext = item.optString("ext"); boolean hls = "m3u8".equals(ext); MediaItem media;
+                    if (hls) {
+                        Download d = hlsDownload(c, id);
+                        if (d == null || d.state != Download.STATE_COMPLETED) throw new IllegalStateException();
+                        media = d.request.toMediaItem();
+                    } else {
+                        if (!complete(c, item)) throw new IllegalStateException();
+                        media = MediaItem.fromUri(Uri.fromFile(video(c, id, ext)));
+                    }
+                    if (GalleryExport.isExporting(id)) throw new IllegalStateException("Export already running");
+                    SharedFileExport.start(c, id, item.optString("title"), media, subtitle(c, id), hls, call);
+                } catch (Exception error) { exportFinished(c, id, false, null, null); call.reject("Offline item cannot be exported", error); }
+            }
+        });
+    }
+    @PluginMethod public void openExternal(PluginCall call) {
+        Context c = getContext(); String id = call.getString("id", ""), address;
+        if (!safeId(id)) { call.reject("Invalid item"); return; }
+        synchronized (LOCK) { JSONObject item = find(c, id); address = item == null ? "" : item.optString("exportUri", ""); }
+        try {
+            Uri uri = Uri.parse(address);
+            if (!"content".equals(uri.getScheme())) throw new IllegalArgumentException();
+            try (android.content.res.AssetFileDescriptor descriptor = c.getContentResolver().openAssetFileDescriptor(uri, "r")) { if (descriptor == null) throw new IllegalStateException(); }
+            Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getActivity().startActivity(Intent.createChooser(intent, "Open video")); call.resolve();
+        } catch (Exception error) { call.reject("Exported video is unavailable", error); }
     }
     @PluginMethod public void exportGallery(PluginCall call) {
         Context c = getContext(); String id = call.getString("id", "");

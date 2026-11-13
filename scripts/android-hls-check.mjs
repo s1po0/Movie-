@@ -63,9 +63,42 @@ try {
   const ocr = execFileSync('tesseract', ['/tmp/kurd-hls-frame.png','stdout','--psm','6'], {encoding:'utf8', stdio:['ignore','pipe','ignore']});
   if (!/KURD\s+TEST/i.test(ocr)) throw Error('Burned-in test subtitle not detected in gallery video');
   unlinkSync('/tmp/kurd-hls-frame.png'); unlinkSync('/tmp/kurd-hls-gallery-test.mp4');
+  // Independent files share their base name and stay available outside the app.
+  const shared = await evaluate(`window.Capacitor.nativePromise('Offline','exportFiles',${JSON.stringify({ id: item.id })})`);
+  if (!shared?.saved || !shared.name) throw Error('Separate file export failed');
+  const base = `/sdcard/Download/Kurd Movie/${shared.name}`;
+  adb('pull', `${base}.mp4`, '/tmp/separate-video.mp4'); adb('pull', `${base}.srt`, '/tmp/separate-subtitle.srt');
+  const { readFileSync } = await import('node:fs');
+  const srt = readFileSync('/tmp/separate-subtitle.srt', 'utf8');
+  if (!srt.includes('00:00:00,000 --> 00:00:02,300') || !srt.includes('سڵاو جیهان')) throw Error('Separate SRT text/timing incorrect');
+  const separateMeta = JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type,codec_name','-of','json','/tmp/separate-video.mp4'],{encoding:'utf8'}));
+  if (!separateMeta.streams?.some(s=>s.codec_type==='video' && s.codec_name==='h264') || Number(separateMeta.format?.duration)<1) throw Error('Separate MP4 invalid');
+  execFileSync('ffmpeg',['-y','-v','error','-ss','0.5','-i','/tmp/separate-video.mp4','-frames:v','1','-vf','scale=1920:-1','/tmp/separate-frame.png']);
+  const cleanOcr = execFileSync('tesseract',['/tmp/separate-frame.png','stdout','--psm','6'],{encoding:'utf8',stdio:['ignore','pipe','ignore']});
+  if (/KURD\s+TEST/i.test(cleanOcr)) throw Error('Separate MP4 unexpectedly has burned-in subtitles');
+  unlinkSync('/tmp/separate-frame.png'); unlinkSync('/tmp/separate-video.mp4'); unlinkSync('/tmp/separate-subtitle.srt');
+  const exported = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(row=>row.id===${JSON.stringify(item.id)}))`);
+  if (exported?.export !== 'done' || exported.exportName !== shared.name) throw Error('Separate export state missing');
+  await evaluate(`window.Capacitor.nativePromise('Offline','openExternal',${JSON.stringify({id:item.id})})`);
+  adb('shell','input','keyevent','4');
+
   await evaluate(`window.Capacitor.nativePromise('Offline','remove' ,${JSON.stringify({ id: item.id })})`);
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");
   if (remaining.some(row => row.id === item.id)) throw Error('HLS deletion failed');
-  console.log('::notice title=Android HLS check::Downloaded HLS and verified offline subtitle playback, 360p selection and a burned-in subtitle in gallery MP4 with networking disabled.');
+  // Shared files must survive deletion of the app-private download.
+  const exists = adb('shell','ls', `${base}.mp4`, `${base}.srt`);
+  if (!exists.includes('.mp4') || !exists.includes('.srt')) throw Error('Public files removed with private item');
+  // The one-click choice exports automatically when the download finishes while the dialog is open.
+  adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable');
+  const auto = await evaluate(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({ title: 'Automatic export', url, subtitle, maxHeight: 360, autoExport:true })})`);
+  await evaluate("document.querySelector('[data-action=offline]').click()");
+  await wait('automatic shared export', async () => {
+    const row = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id===${JSON.stringify(auto.id)}))`);
+    if (row?.state === 'failed' || row?.export === 'failed') throw Error('Automatic export failed');
+    return row?.state === 'ready' && row.export === 'done';
+  },180000);
+  await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id:auto.id})})`);
+
+  console.log('::notice title=Android HLS check::Downloaded HLS and verified offline playback, 360p, optional burned-in gallery MP4, separate movable MP4/SRT and automatic export with networking disabled.');
 } catch (error) { console.log(`::error title=Android HLS check::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
 finally { try { adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable'); } catch {} socket?.close(); }

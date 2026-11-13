@@ -55,8 +55,8 @@ final class GalleryExport {
     private static String activeId;
     private static Transformer activeTransformer;
     static synchronized boolean isExporting(String id) { return id.equals(activeId); }
-    private static synchronized boolean reserve(String id) { if (activeId != null) return false; activeId = id; return true; }
-    private static synchronized void clear() { activeId = null; activeTransformer = null; }
+    static synchronized boolean reserve(String id) { if (activeId != null) return false; activeId = id; return true; }
+    static synchronized void clear() { activeId = null; activeTransformer = null; }
 
     static void start(Context context, String id, String title, MediaItem media, File subtitle, boolean hls, PluginCall call) {
         if (Build.VERSION.SDK_INT < 29) { call.reject("Gallery export requires Android 10 or later"); return; }

@@ -27,7 +27,7 @@ try {
   if (source !== 'ready') throw Error('AnimeCube or Dailymotion source unavailable');
   await wait('real English subtitle', () => evaluate("document.querySelector('#subtitle-status')?.textContent.includes('بارکرا')"), 90000);
   // Do not inject or confirm a fabricated subtitle: the app must translate the real source.
-  await evaluate("document.querySelector('[data-action=download-current]').click()");
+  await evaluate("document.querySelector('#offline-auto-export').checked=false; document.querySelector('[data-action=download-current]').click()");
   await wait('download queued', () => evaluate("Boolean(document.querySelector('#offline-list'))"), 120000);
   const id = await wait('AnimeCube download', async () => {
     const {items} = await evaluate("window.Capacitor.nativePromise('Offline','list',{})");
