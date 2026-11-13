@@ -112,7 +112,7 @@ public final class OfflinePlugin extends Plugin {
             try {
                 MediaItem media = new MediaItem.Builder().setMediaId(id).setUri(uri).setMimeType(MimeTypes.APPLICATION_M3U8).build();
                 DownloadHelper helper = DownloadHelper.forMediaItem(media,
-                    DownloadHelper.getDefaultTrackSelectorParameters(c).buildUpon().setMaxVideoSize(1280, 720).build(),
+                    DownloadHelper.getDefaultTrackSelectorParameters(c).buildUpon().setMaxVideoSize(1280, 720).setExceedVideoConstraintsIfNecessary(false).build(),
                     new DefaultRenderersFactory(c), HlsDownloads.http());
                 helper.prepare(new DownloadHelper.Callback() {
                     @Override public void onPrepared(DownloadHelper prepared) {
