@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[final-v22-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -457,3 +457,40 @@ jobs:
           result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
           print('::notice title=Unsigned APK blob::'+json.loads(result.stdout)['sha'])
           PY2
+
+  final-v22-check:
+    if: contains(github.event.head_commit.message, '[final-v22-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve exact signed APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/ac5dab66aa5054559d7444b4502c38fa2bddd9ac > /tmp/old.apk
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/9d8bc5d757aeee76862f31a0938bad5b85c2c82c > /tmp/new.apk
+          echo '47a37d36e762cecbf28c8799abb5a789141da7d2acc3d42fe70f3df88f508483  /tmp/old.apk' | sha256sum -c -
+          echo '04ae19846d66d0a239658c834819df69682a8314a4a1d6a477d25a457b94c263  /tmp/new.apk' | sha256sum -c -
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: |
+            adb root
+            adb wait-for-device
+            adb install /tmp/old.apk
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
+            adb install -r /tmp/new.apk
+            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
+            adb shell dumpsys package app.dimo.movies | grep 'versionCode=22'
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
+            echo '::notice title=Real v21 to v22 upgrade::Exact signed APK upgraded in place and preserved private app data.'
