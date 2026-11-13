@@ -11,6 +11,7 @@ try {
   const ws = new URL(page.webSocketDebuggerUrl); ws.host = '127.0.0.1:9222'; socket = new WebSocket(ws.href);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let seq = 0; const pending = new Map();
+  socket.onclose = () => { for (const p of pending.values()) p.reject(Error('WebView debugging connection closed')); pending.clear(); };
   socket.onmessage = event => { const d = JSON.parse(event.data), p = pending.get(d.id); if (!p) return; pending.delete(d.id); d.error ? p.reject(Error(d.error.message)) : p.resolve(d.result); };
   const evaluate = expression => new Promise((resolve, reject) => {
     const id = ++seq; pending.set(id, { resolve: result => result.exceptionDetails ? reject(Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text)) : resolve(result.result.value), reject });
@@ -63,9 +64,11 @@ try {
   const ocr = execFileSync('tesseract', ['/tmp/kurd-hls-frame.png','stdout','--psm','6'], {encoding:'utf8', stdio:['ignore','pipe','ignore']});
   if (!/KURD\s+TEST/i.test(ocr)) throw Error('Burned-in test subtitle not detected in gallery video');
   unlinkSync('/tmp/kurd-hls-frame.png'); unlinkSync('/tmp/kurd-hls-gallery-test.mp4');
+  console.log('::notice title=Separate export stage::Gallery export and burned subtitle verified');
   // Independent files share their base name and stay available outside the app.
   const shared = await evaluate(`window.Capacitor.nativePromise('Offline','exportFiles',${JSON.stringify({ id: item.id })})`);
   if (!shared?.saved || !shared.name) throw Error('Separate file export failed');
+  console.log('::notice title=Separate export stage::Native export completed');
   const base = `/sdcard/Download/Kurd Movie/${shared.name}`;
   adb('pull', `${base}.mp4`, '/tmp/separate-video.mp4'); adb('pull', `${base}.srt`, '/tmp/separate-subtitle.srt');
   const { readFileSync } = await import('node:fs');
@@ -79,6 +82,7 @@ try {
   unlinkSync('/tmp/separate-frame.png'); unlinkSync('/tmp/separate-video.mp4'); unlinkSync('/tmp/separate-subtitle.srt');
   const exported = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(row=>row.id===${JSON.stringify(item.id)}))`);
   if (exported?.export !== 'done' || exported.exportName !== shared.name) throw Error('Separate export state missing');
+  console.log('::notice title=Separate export stage::MP4 and SRT verified');
   await evaluate(`window.Capacitor.nativePromise('Offline','openExternal',${JSON.stringify({id:item.id})})`);
   adb('shell','input','keyevent','4');
 
@@ -88,6 +92,7 @@ try {
   // Shared files must survive deletion of the app-private download.
   const exists = adb('shell','ls', `${base}.mp4`, `${base}.srt`);
   if (!exists.includes('.mp4') || !exists.includes('.srt')) throw Error('Public files removed with private item');
+  console.log('::notice title=Separate export stage::Public files survive deletion');
   // The one-click choice exports automatically when the download finishes while the dialog is open.
   adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable');
   const auto = await evaluate(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({ title: 'Automatic export', url, subtitle, maxHeight: 360, autoExport:true })})`);
