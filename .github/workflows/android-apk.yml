@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[final-v21-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -431,67 +431,3 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell pm grant app.dimo.movies android.permission.WRITE_EXTERNAL_STORAGE && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-files-legacy-check.mjs
-
-  local-sign-build:
-    if: contains(github.event.head_commit.message, '[local-sign-build]')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleRelease
-      - name: Export unsigned APK for local signing
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY2'
-          import base64, json, os, subprocess
-          data = open('android/app/build/outputs/apk/release/app-release-unsigned.apk', 'rb').read()
-          payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
-          result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
-          print('::notice title=Unsigned APK blob::'+json.loads(result.stdout)['sha'])
-          PY2
-
-  final-v21-check:
-    if: contains(github.event.head_commit.message, '[final-v21-check]')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - name: Retrieve exact signed APKs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/bf1c9230edec70f4ff9e9ffa9dcc597ccb6d6b54 > /tmp/old.apk
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/ac5dab66aa5054559d7444b4502c38fa2bddd9ac > /tmp/new.apk
-          echo '43b656e148cd7104441a49a70aa53712460e033bc55db693ccf22912f1b6fe3f  /tmp/old.apk' | sha256sum -c -
-          echo '47a37d36e762cecbf28c8799abb5a789141da7d2acc3d42fe70f3df88f508483  /tmp/new.apk' | sha256sum -c -
-      - name: Enable hardware virtualization
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
-          script: |
-            adb root
-            adb wait-for-device
-            adb install /tmp/old.apk
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
-            adb install -r /tmp/new.apk
-            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
-            adb shell dumpsys package app.dimo.movies | grep 'versionCode=21'
-            adb shell am start -W -n app.dimo.movies/.MainActivity
-            adb shell pidof app.dimo.movies
-            echo '::notice title=Real v20 to v21 upgrade::Exact signed APK upgraded in place and preserved private app data.'
