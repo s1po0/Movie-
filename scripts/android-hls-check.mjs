@@ -96,13 +96,17 @@ try {
   console.log('::notice title=Separate export stage::Public files survive deletion');
   // The one-click choice exports automatically when the download finishes while the dialog is open.
   adb('shell', 'svc', 'wifi', 'enable'); adb('shell', 'svc', 'data', 'enable');
+  await evaluate("document.querySelector('#modal [data-action=close]').click()");
   const auto = await evaluate(`window.Capacitor.nativePromise('Offline','start',${JSON.stringify({ title: 'Automatic export', url, subtitle, maxHeight: 360, autoExport:true })})`);
-  await evaluate("document.querySelector('[data-action=offline]').click()");
-  await wait('automatic shared export', async () => {
+  const autoRow = await wait('automatic shared export without the downloads dialog', async () => {
     const row = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id===${JSON.stringify(auto.id)}))`);
     if (row?.state === 'failed' || row?.export === 'failed') throw Error('Automatic export failed');
-    return row?.state === 'ready' && row.export === 'done';
+    return row?.state === 'ready' && row.export === 'done' ? row : null;
   },180000);
+  const autoBase = `/sdcard/Movies/Kurd Movie/${autoRow.exportName}`;
+  adb('pull', `${autoBase}.mp4`, '/tmp/auto-video.mp4'); adb('pull', `${autoBase}.srt`, '/tmp/auto-subtitle.srt');
+  if (!readFileSync('/tmp/auto-subtitle.srt', 'utf8').includes('سڵاو جیهان')) throw Error('Automatic SRT was not saved');
+  unlinkSync('/tmp/auto-video.mp4'); unlinkSync('/tmp/auto-subtitle.srt');
   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id:auto.id})})`);
 
   console.log('::notice title=Android HLS check::Downloaded HLS and verified offline playback, 360p, optional burned-in gallery MP4, separate movable MP4/SRT and automatic export with networking disabled.');

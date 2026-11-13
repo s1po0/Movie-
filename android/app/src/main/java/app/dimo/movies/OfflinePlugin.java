@@ -41,7 +41,7 @@ import java.util.UUID;
 
 /** Downloads direct media and unprotected, finite HLS streams. */
 @OptIn(markerClass = UnstableApi.class)
-@CapacitorPlugin(name = "Offline", permissions = { @Permission(alias = "legacyStorage", strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }) })
+@CapacitorPlugin(name = "Offline", permissions = { @Permission(alias = "legacyStorage", strings = { Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE }) })
 public final class OfflinePlugin extends Plugin {
     private static final String PREFS = "offline-v1";
     private static final Object LOCK = new Object();
