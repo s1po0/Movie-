@@ -431,3 +431,30 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-files-legacy-check.mjs
+
+  local-sign-build:
+    if: contains(github.event.head_commit.message, '[local-sign-build]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleRelease
+      - name: Export unsigned APK for local signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY2'
+          import base64, json, os, subprocess
+          data = open('android/app/build/outputs/apk/release/app-release-unsigned.apk', 'rb').read()
+          payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+          result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
+          print('::notice title=Unsigned APK blob::'+json.loads(result.stdout)['sha'])
+          PY2

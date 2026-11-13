@@ -36,5 +36,5 @@ try {
   if(!meta.streams?.some(s=>s.codec_type==='video')||Number(meta.format?.duration)<1) throw Error('Legacy MP4 invalid');
   unlinkSync('/tmp/legacy-video.mp4'); unlinkSync('/tmp/legacy-subtitle.srt');
   console.log('::notice title=Legacy shared export::Android 9 saved separate MP4 and SRT in public Movies with storage permission.');
-} catch(error) { console.log(`::error title=Legacy shared export::${String(error.message).split('\n')[0]}`); process.exitCode=1; }
+} catch(error) { console.log(`::error title=Legacy shared export::${String(error.message).split('\n')[0]}`); try { for (const line of adb('logcat','-d','-s','SeparateExportDebug:E','*:S').split('\n')) if (line.includes('SeparateExportDebug') || line.includes('Exception') || line.includes('SharedFileExport')) console.log(`::error title=Legacy export log::${line}`); } catch {} process.exitCode=1; }
 finally { socket?.close(); }
