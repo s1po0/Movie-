@@ -448,4 +448,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create kurd-movie-v21 /tmp/Kurd-Movie.apk --repo s1po0/Movie- --target 49afc6770e7cd8bb5dc2cb37f7391b19525c2522 --title 'Kurd Movie v21' --notes 'Separate MP4 and Sorani SRT files are saved in Movies/Kurd Movie. Keep the app open until export completes. Tested on Android 11; shared export on Android 9 did not pass testing.' --prerelease
+          if ! gh release create kurd-movie-v21 /tmp/Kurd-Movie.apk --repo s1po0/Movie- --target 49afc6770e7cd8bb5dc2cb37f7391b19525c2522 --title 'Kurd Movie v21' --notes 'Separate MP4 and Sorani SRT files are saved in Movies/Kurd Movie. Keep the app open until export completes. Tested on Android 11; shared export on Android 9 did not pass testing.' --prerelease > /tmp/publish.log 2>&1; then
+            while IFS= read -r line; do echo "::error title=Publish error::$line"; done < /tmp/publish.log
+            exit 1
+          fi
