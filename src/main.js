@@ -240,7 +240,7 @@ function libraryDialog() {
 async function offlineDialog() {
   const token = ++offlineDialogToken;
   clearTimeout(offlineRefresh);
-  openModal(`<div class="dialog-header"><div><span class="overline">YOUR OFFLINE CINEMA</span><h2>دابەزێنراوەکان</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">فیلم و ئەڵقە دابەزێنراوەکان لەگەڵ ژێرنووس، بەبێ ئینتەرنێت.</p><div class="offline-note">${icon('hard-drive')}<span>MP4، WebM و HLSی بێ پاراستن. دوای تەواوبوون بە دوگمەی Gallery دەتوانرێت ڤیدیۆ لەگەڵ ژێرنووس لە Android 10+ پاشەکەوت بکرێت؛ ئەپەکە کراوە بهێڵەوە.</span></div><div id="offline-list" class="saved-list" role="status">بارکردن...</div>`);
+  openModal(`<div class="dialog-header"><div><span class="overline">YOUR OFFLINE CINEMA</span><h2>دابەزێنراوەکان</h2></div><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p class="dialog-desc">فیلم و ئەڵقە دابەزێنراوەکان لەگەڵ ژێرنووس، بەبێ ئینتەرنێت.</p><div class="offline-note">${icon('hard-drive')}<span>MP4، WebM و HLSی بێ پاراستن. بۆ دابەزاندنی پێشوو دوگمەی وەرگێڕان بەکاربهێنە. دوای تەواوبوون بە دوگمەی Gallery دەتوانرێت ڤیدیۆ لەگەڵ ژێرنووس لە Android 10+ پاشەکەوت بکرێت؛ ئەپەکە کراوە بهێڵەوە.</span></div><div id="offline-list" class="saved-list" role="status">بارکردن...</div>`);
   if (!nativeOfflineAvailable()) { document.querySelector('#offline-list').textContent = 'دابەزاندنی ئۆفلاین تەنها لە ئەپی ئەندرۆید بەردەستە.'; return; }
   const refresh = async () => {
     try {
@@ -250,7 +250,7 @@ async function offlineDialog() {
         const progress = offlineProgress(item);
         const phase = item.phase === 'queued' ? 'لە ڕیزدایە' : item.phase === 'paused' ? 'وەستاوە؛ چاوەڕوانی ئینتەرنێت یان سیستەم' : 'لە دابەزاندندایە';
         const state = item.state === 'ready' ? 'ئامادەی سەیرکردن' : item.state === 'failed' ? 'دابەزاندن سەرکەوتوو نەبوو' : `${phase}${progress.text ? ` · ${progress.text}` : ''}`;
-        return `<div class="saved-row offline-row"><button class="saved-title" data-offline-play="${escapeHtml(item.id)}" ${item.state !== 'ready' ? 'disabled' : ''}><span class="saved-icon">${icon(item.state === 'ready' ? 'play' : 'download')}</span><span><strong dir="auto">${escapeHtml(item.title)}</strong><small>${escapeHtml(state)}</small>${item.state === 'downloading' && progress.percent !== null ? `<progress max="100" value="${progress.percent}" aria-label="ڕێژەی دابەزین"></progress>` : ''}</span></button>${item.state === 'ready' ? `<button class="ghost" data-offline-export="${escapeHtml(item.id)}" type="button">Gallery</button>` : ''}<button class="delete" data-offline-delete="${escapeHtml(item.id)}" aria-label="سڕینەوەی ${escapeHtml(item.title)}">${icon('trash-2')}</button></div>`;
+        return `<div class="saved-row offline-row"><button class="saved-title" data-offline-play="${escapeHtml(item.id)}" ${item.state !== 'ready' ? 'disabled' : ''}><span class="saved-icon">${icon(item.state === 'ready' ? 'play' : 'download')}</span><span><strong dir="auto">${escapeHtml(item.title)}</strong><small>${escapeHtml(state)}</small>${item.state === 'downloading' && progress.percent !== null ? `<progress max="100" value="${progress.percent}" aria-label="ڕێژەی دابەزین"></progress>` : ''}</span></button>${item.state === 'ready' ? `<button class="ghost" data-offline-translate="${escapeHtml(item.id)}" type="button">وەرگێڕان</button><button class="ghost" data-offline-export="${escapeHtml(item.id)}" type="button">Gallery</button>` : ''}<button class="delete" data-offline-delete="${escapeHtml(item.id)}" aria-label="سڕینەوەی ${escapeHtml(item.title)}">${icon('trash-2')}</button></div>`;
       }).join('');
       document.querySelector('#offline-list').innerHTML = html || '<p class="saved-empty">هێشتا هیچ فیلمێکت دابەنەزاندووە.</p>';
       paintIcons();
@@ -704,6 +704,23 @@ app.addEventListener('click', e => {
   if (action === 'animecube-source') openAnimeCubeSource();
   const offlinePlay = e.target.closest('[data-offline-play]');
   if (offlinePlay && !offlinePlay.disabled) Offline.open({ id: offlinePlay.dataset.offlinePlay }).then(item => { closeModal(); if (!item.nativePlayer) openPlayer({ id: 'offline-item', title: item.title, url: item.url, offlineSubtitle: item.subtitle }); }).catch(() => toast('فیلمە دابەزێنراوەکە نەکرایەوە.'));
+  const offlineTranslate = e.target.closest('[data-offline-translate]');
+  if (offlineTranslate && !offlineTranslate.disabled) {
+    const id = offlineTranslate.dataset.offlineTranslate;
+    offlineTranslate.disabled = true; offlineTranslate.textContent = 'وەرگێڕان...';
+    (async () => {
+      const { subtitle } = await Offline.getSubtitle({ id });
+      const original = parseSubtitles(subtitle);
+      if (!original.length) throw new Error('No subtitle');
+      const vtt = await translateMenuSubtitles(subtitle, googleTranslateForMenu, {
+        onProgress: (done, total) => { if (offlineTranslate.isConnected) offlineTranslate.textContent = `${done}/${total}`; },
+      });
+      if (parseSubtitles(vtt).length !== original.length || !/[\u0600-\u06ff]/.test(vtt)) throw new Error('Incomplete Sorani translation');
+      await Offline.updateSubtitle({ id, subtitle: vtt });
+      toast('ژێرنووسی سۆرانی بۆ ئەم دابەزاندنە پاشەکەوت کرا.');
+    })().catch(() => toast('وەرگێڕان تەواو نەبوو؛ ژێرنووسی پێشوو نەگۆڕدرا.'))
+      .finally(() => { if (offlineTranslate.isConnected) { offlineTranslate.disabled = false; offlineTranslate.textContent = 'وەرگێڕان'; } });
+  }
   const offlineExport = e.target.closest('[data-offline-export]');
   if (offlineExport && !offlineExport.disabled) {
     offlineExport.disabled = true; offlineExport.textContent = 'ئامادەکردن...';

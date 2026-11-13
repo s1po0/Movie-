@@ -18,6 +18,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Environment;
+import android.util.AtomicFile;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -198,6 +199,31 @@ public final class OfflinePlugin extends Plugin {
                 JSObject result = new JSObject(); result.put("title", item.optString("title")); result.put("subtitle", out.toString("UTF-8"));
                 result.put("url", "https://localhost/_offline/" + id + "." + item.optString("ext")); call.resolve(result);
             } catch (Exception error) { call.reject("Offline item is unavailable", error); }
+        }
+    }
+    @PluginMethod public void getSubtitle(PluginCall call) {
+        Context c = getContext(); String id = call.getString("id", "");
+        if (!safeId(id)) { call.reject("Invalid item"); return; }
+        synchronized (LOCK) {
+            try {
+                if (find(c, id) == null) throw new IllegalStateException();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                try (FileInputStream in = new FileInputStream(subtitle(c, id))) {
+                    byte[] buffer = new byte[8192]; int n;
+                    while ((n = in.read(buffer)) != -1) { out.write(buffer, 0, n); if (out.size() > 8_000_000) throw new IllegalStateException(); }
+                }
+                JSObject result = new JSObject(); result.put("subtitle", out.toString("UTF-8")); call.resolve(result);
+            } catch (Exception error) { call.reject("Subtitle is unavailable", error); }
+        }
+    }
+    @PluginMethod public void updateSubtitle(PluginCall call) {
+        Context c = getContext(); String id = call.getString("id", ""), vtt = call.getString("subtitle", "");
+        if (!safeId(id) || !vtt.startsWith("WEBVTT\n") || vtt.length() > 2_000_000 || !vtt.contains(" --> ")) { call.reject("Invalid subtitle"); return; }
+        synchronized (LOCK) {
+            if (find(c, id) == null || GalleryExport.isExporting(id)) { call.reject("Item is unavailable or being exported"); return; }
+            AtomicFile file = new AtomicFile(subtitle(c, id)); FileOutputStream out = null;
+            try { out = file.startWrite(); out.write(vtt.getBytes(StandardCharsets.UTF_8)); file.finishWrite(out); call.resolve(); }
+            catch (Exception error) { if (out != null) file.failWrite(out); call.reject("Subtitle could not be saved", error); }
         }
     }
     @PluginMethod public void exportGallery(PluginCall call) {

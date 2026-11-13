@@ -30,6 +30,18 @@ try {
     if (row?.state === 'failed') throw Error('HLS download failed');
     return row?.state === 'ready';
   });
+  // Repair an existing English download without downloading its video again.
+  const english = 'WEBVTT\n\n00:00:00.000 --> 00:00:02.300\nHello my friend\n';
+  await evaluate(`window.Capacitor.nativePromise('Offline','updateSubtitle',${JSON.stringify({ id: item.id, subtitle: english })})`);
+  await evaluate("document.querySelector('[data-action=offline]').click()");
+  await wait('existing download translation button', () => evaluate(`Boolean(document.querySelector('[data-offline-translate="${item.id}"]'))`));
+  await evaluate(`document.querySelector('[data-offline-translate="${item.id}"]').click()`);
+  await wait('existing English subtitle translated and replaced', async () => {
+    const data = await evaluate(`window.Capacitor.nativePromise('Offline','getSubtitle',${JSON.stringify({ id: item.id })})`);
+    return /[\u0600-\u06ff]/.test(data.subtitle);
+  }, 90000);
+  // Restore a known cue for deterministic visual checking of the exported MP4.
+  await evaluate(`window.Capacitor.nativePromise('Offline','updateSubtitle',${JSON.stringify({ id: item.id, subtitle })})`);
   adb('shell', 'svc', 'wifi', 'disable'); adb('shell', 'svc', 'data', 'disable'); adb('logcat', '-c');
   await new Promise(resolve => setTimeout(resolve, 3000));
   const opened = await evaluate(`window.Capacitor.nativePromise('Offline','open',${JSON.stringify({ id: item.id })})`);
