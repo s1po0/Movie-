@@ -26,10 +26,11 @@ try {
     if (items[0]?.state === 'failed') throw Error('DownloadManager failed');
     return items[0]?.state === 'ready' && items[0].id;
   }, 240000);
-  await wait('automatic direct-file export', async () => {
+  const exported = await wait('automatic direct-file export', async () => {
     const item = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id==='${id}'))`);
-    return item?.export === 'done';
+    return item?.export === 'done' || item?.export === 'failed' ? item.export : '';
   }, 180000);
+  if (exported !== 'done') throw Error('Automatic export failed');
   // Disconnect both device transports before opening the downloaded file.
   execFileSync('adb', ['shell', 'svc', 'wifi', 'disable']); execFileSync('adb', ['shell', 'svc', 'data', 'disable']);
   await new Promise(r => setTimeout(r, 3000));
@@ -48,5 +49,5 @@ try {
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.length)");
   if (remaining !== 0) throw Error('Offline deletion failed');
   console.log('::notice title=Android offline check::Downloaded direct MP4 with Kurdish VTT; disabled device networking; verified partial requests, playback, subtitles and deletion.');
-} catch (error) { console.log(`::error title=Android offline check::${String(error.message).split('\n')[0]}`); process.exitCode = 1; }
+} catch (error) { console.log(`::error title=Android offline check::${String(error.message).split('\n')[0]}`); try { for (const line of execFileSync('adb',['logcat','-d','-s','SeparateExportDebug:E','*:S'],{encoding:'utf8'}).split('\n').filter(line=>/SeparateExportDebug/.test(line)).slice(-25)) console.log(`::error title=Export debug::${line.slice(0,300)}`); } catch {} process.exitCode = 1; }
 finally { try { execFileSync('adb', ['shell', 'svc', 'wifi', 'enable']); execFileSync('adb', ['shell', 'svc', 'data', 'enable']); } catch {} socket?.close(); }
