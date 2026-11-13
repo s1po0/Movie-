@@ -23,6 +23,7 @@ import androidx.media3.transformer.DefaultDecoderFactory;
 import androidx.media3.transformer.ExoPlayerAssetLoader;
 import androidx.media3.transformer.ExportException;
 import androidx.media3.transformer.ExportResult;
+import androidx.media3.transformer.InAppMuxer;
 import androidx.media3.transformer.Transformer;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
@@ -60,6 +61,7 @@ final class SharedFileExport {
                 new DefaultDecoderFactory.Builder(app).build(), Clock.DEFAULT, new DefaultMediaSourceFactory(data));
             // No video effects or subtitle track: Transformer creates a normal, unburned MP4.
             active = new Transformer.Builder(app).setAssetLoaderFactory(loader)
+                .setMuxerFactory(new InAppMuxer.Factory.Builder().build())
                 .setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .addListener(new Transformer.Listener() {
                     @Override public void onCompleted(Composition composition, ExportResult result) {
