@@ -50,11 +50,11 @@ try {
     await page.locator('[data-play="series-tomb-of-fallen-gods"]').click();
     await page.locator('#player-modal iframe[src*="/tv/206343/1/1"]').waitFor();
     await page.locator('select#episode-season').waitFor();
-    await page.locator('#episode-season').selectOption('3');
-    await page.locator('#episode-number').selectOption('52');
+    await page.locator('#episode-season').selectOption('2');
+    await page.locator('#episode-number').selectOption('2');
     await page.locator('[data-action=one-dm]').waitFor();
     await page.locator('[data-action=play-episode]').click();
-    await page.locator('#player-modal iframe[src*="/tv/206343/3/52"]').waitFor();
+    await page.locator('#player-modal iframe[src*="/tv/206343/2/2"]').waitFor();
     await page.locator('#player-modal [data-action=close-player]').click();
     if (await page.locator('#library').count()) throw Error('The removed library section is still visible');
     await page.locator('.top-add[data-action="library"]').click();
