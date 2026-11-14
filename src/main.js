@@ -2,6 +2,7 @@ import './style.css';
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { createIcons, Play, Plus, Clapperboard, Captions, Languages, Smartphone, ArrowUpLeft, Trash2, Sparkles, Search, X, Upload, House, Bookmark, ChevronLeft, Film, Download, WifiOff, HardDrive } from 'lucide';
 import { parseSubtitles, toVtt } from './subtitles.js';
+import { decodeSubtitle } from './subtitle-encoding.js';
 import { translationGroups, translationUrl, translatedText, translateGroup, soraniRtl } from './translate.js';
 import { searchMovies } from './catalog.js';
 import { movies } from './movies.js';
@@ -797,14 +798,18 @@ app.addEventListener('change', async e => {
     if (!file) return;
     try {
       if (file.size > 2_000_000) throw new Error('فایلەکە زۆر گەورەیە.');
-      const text = await file.text();
+      const text = decodeSubtitle(await file.arrayBuffer());
       if (session === playerSession && requestId === embeddedSourceRequest) { embeddedHasSource = true; if (nativeMenuAvailable()) { embeddedMenuSource = text; translateForPlayerMenu(text, session, requestId); } else embeddedSubtitles?.setCues(text); }
     } catch (error) { if (session === playerSession && requestId === embeddedSourceRequest) document.querySelector('#embedded-subtitle-status').textContent = error.message; }
   }
-  if (e.target.id === 'subtitle-file') { const file = e.target.files[0], session = playerSession, requestId = ++subtitleRequest; if (!file) return; try { const text = await file.text(); if (session === playerSession && requestId === subtitleRequest) {
-      const lang = url === current?.subtitle ? (current.subtitleLanguage || 'auto').replace(/-auto$/, '') : 'auto';
-      loadSubtitle(text, lang);
-    } } catch (error) { if (session === playerSession && requestId === subtitleRequest) document.querySelector('#subtitle-status').textContent = error.message; } }
+  if (e.target.id === 'subtitle-file') {
+    const file = e.target.files[0], session = playerSession, requestId = ++subtitleRequest;
+    if (!file) return;
+    try {
+      const text = decodeSubtitle(await file.arrayBuffer());
+      if (session === playerSession && requestId === subtitleRequest) loadSubtitle(text);
+    } catch (error) { if (session === playerSession && requestId === subtitleRequest) document.querySelector('#subtitle-status').textContent = error.message; }
+  }
   if (e.target.id === 'subtitle-source' && e.target.value) loadSubtitleUrl(e.target.value);
   if (e.target.id === 'track-select') { const video = document.querySelector('#video'); Array.from(video.textTracks).forEach((t, i) => { t.mode = String(i) === e.target.value ? 'showing' : 'disabled'; }); }
   if (e.target.id === 'language') document.querySelector('#custom-language-label').classList.toggle('hidden', e.target.value !== 'custom');

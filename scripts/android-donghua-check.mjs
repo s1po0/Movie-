@@ -49,6 +49,7 @@ try {
   adb('pull', `${base}.mp4`, '/tmp/animecube-export.mp4');
   adb('pull', `${base}.srt`, '/tmp/animecube-export.srt');
   const srt = readFileSync('/tmp/animecube-export.srt','utf8');
+  if (!srt.startsWith('\uFEFF')) throw Error('Public SRT missing UTF-8 BOM');
   if (!/[\u0600-\u06ff]/.test(srt) || (srt.match(/ --> /g) || []).length < 10) throw Error('Public SRT missing Sorani cues');
   const texts = srt.split(/\r?\n\r?\n/).filter(block => block.includes(' --> ')).flatMap(block => block.split(/\r?\n/).slice(2));
   if (!texts.length || texts.some(line => line && (!line.startsWith('\u200f') || !line.endsWith('\u200f')))) throw Error('SRT RTL marks missing');

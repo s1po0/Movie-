@@ -1,4 +1,4 @@
-import { parseSubtitles, toVtt } from './subtitles.js';
+import { parseSubtitles, toVtt, validateSubtitleTimings } from './subtitles.js';
 import { translationGroups, translateGroup, soraniRtl, assertSoraniScript } from './translate.js';
 
 // A whole VTT must be ready before the external player's subtitle menu can
@@ -16,6 +16,7 @@ export async function translateMenuSubtitles(text, request, {
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 3 || !Number.isFinite(minSpacingMs) || minSpacingMs < 0) throw new Error('Invalid translation settings');
   const cues = parseSubtitles(text);
   if (!cues.length || cues.length > 6000) throw new Error('Invalid subtitle file');
+  validateSubtitleTimings(cues);
   const groups = translationGroups(cues, 2600, 30);
   const results = new Array(groups.length);
   let next = 0, completed = 0, failure, nextRequestAt = 0;

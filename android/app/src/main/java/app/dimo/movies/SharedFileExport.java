@@ -60,7 +60,8 @@ final class SharedFileExport {
         ScopedTarget target = null;
         try {
             byte[] source = readSubtitle(subtitle);
-            byte[] srt = toSrt(new String(source, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+            // A UTF-8 BOM helps file managers and external players detect Sorani encoding.
+            byte[] srt = ("\uFEFF" + toSrt(new String(source, StandardCharsets.UTF_8))).getBytes(StandardCharsets.UTF_8);
             String safe = title.replaceAll("[\\\\/:*?\\\"<>|\\p{Cntrl}]", " ").trim();
             if (safe.isEmpty()) safe = "Kurd Movie";
             if (safe.length() > 75) safe = safe.substring(0, 75);

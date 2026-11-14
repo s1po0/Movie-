@@ -30,3 +30,17 @@ export function batches(cues, maxChars = 24000, maxItems = 100) {
   if (batch.length) result.push(batch);
   return result;
 }
+
+// Keep overlapping cues, but reject malformed or inverted intervals instead of
+// silently exporting a file that players cannot synchronise.
+export function validateSubtitleTimings(cues) {
+  const seconds = value => {
+    const m = /^(\d{2,}):(\d{2}):(\d{2})\.(\d{3})$/.exec(value);
+    if (!m || Number(m[2]) > 59 || Number(m[3]) > 59) return NaN;
+    return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000;
+  };
+  for (const cue of cues) {
+    const start = seconds(cue.start), end = seconds(cue.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error('Invalid subtitle timing');
+  }
+}

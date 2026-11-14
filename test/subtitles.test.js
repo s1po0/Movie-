@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtitles, toVtt, batches } from '../src/subtitles.js';
+import { parseSubtitles, toVtt, batches, validateSubtitleTimings } from '../src/subtitles.js';
 
 test('parses SRT and converts it to WebVTT with timings intact', () => {
   const cues = parseSubtitles('\ufeff1\r\n00:00:01,500 --> 00:00:03,000\r\nHello!\r\nSecond line\r\n\r\n2\r\n00:00:04,000 --> 00:00:05,100\r\n<i>Bye</i>');
@@ -16,4 +16,11 @@ test('splits translation batches without dropping cues', () => {
   const groups = batches(cues, 24000, 100);
   assert.deepEqual(groups.map(group => group.length), [100,100,5]);
   assert.deepEqual(groups.flat(), cues);
+});
+
+test('validates subtitle timing without rejecting overlapping dialogue', () => {
+  const valid = parseSubtitles('1\n00:00:01,000 --> 00:00:03,000\nسڵاو\n\n2\n00:00:02,000 --> 00:00:04,000\nAlice 123');
+  assert.doesNotThrow(() => validateSubtitleTimings(valid));
+  assert.throws(() => validateSubtitleTimings([{start:'00:00:02.000',end:'00:00:01.000'}]), /timing/);
+  assert.throws(() => validateSubtitleTimings([{start:'00:00:60.000',end:'00:01:02.000'}]), /timing/);
 });
