@@ -33,5 +33,10 @@ try {
   if(await requestAndReturn(false)!=='denied') throw Error('Declined permission was accepted');
   if(await requestAndReturn(true)!=='allowed') throw Error('Granted permission was not accepted');
   console.log('::notice title=Root storage permission::Android settings opened on request; denial and grant callbacks both verified.');
-} catch(error) { console.log('::error title=Root storage permission::'+String(error.message).split('\n')[0]);process.exitCode=1; }
+} catch(error) {
+  console.log('::error title=Root storage permission::'+String(error.message).split('\n')[0]);
+  try { for (const line of adb('logcat','-d','-t','1800').split('\n').filter(x=>/FATAL EXCEPTION|Caused by:|app.dimo.movies|Fatal signal|low memory|Killing/.test(x)).slice(-40)) console.log('::notice title=Permission diagnostic::'+line.replace(/%/g,'%25').slice(0,500)); } catch {}
+  try { console.log('::notice title=App PID::'+adb('shell','pidof','app.dimo.movies').trim()); } catch { console.log('::notice title=App PID::Not running'); }
+  process.exitCode=1;
+}
 finally {clearInterval(keepAlive);socket?.close();}
