@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -525,3 +525,23 @@ jobs:
           node-version: 22
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: node scripts/donghua-quality-probe.mjs
+  unsigned-local-signing-apk:
+    if: contains(github.event.head_commit.message, '[unsigned-local-signing-apk]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-local-signing-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
