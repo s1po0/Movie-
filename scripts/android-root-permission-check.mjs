@@ -6,7 +6,6 @@ const wait = async (label, fn, ms=30000) => {
 };
 let socket;
 try {
-  adb('shell','appops','set','app.dimo.movies','MANAGE_EXTERNAL_STORAGE','ignore');
   async function connect() {
     const page = await wait('WebView endpoint', async () => {
       try { return (await (await fetch('http://127.0.0.1:9222/json')).json()).find(x=>x.type==='page' && /localhost/.test(x.url)); } catch { return null; }
