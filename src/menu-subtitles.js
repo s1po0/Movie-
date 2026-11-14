@@ -1,5 +1,5 @@
 import { parseSubtitles, toVtt } from './subtitles.js';
-import { translationGroups, translateGroup } from './translate.js';
+import { translationGroups, translateGroup, soraniRtl, assertSoraniScript } from './translate.js';
 
 // A whole VTT must be ready before the external player's subtitle menu can
 // load it. Keep the original timecodes and bound concurrency and retry count.
@@ -7,6 +7,7 @@ export async function translateMenuSubtitles(text, request, {
   isCurrent = () => true,
   onProgress = () => {},
   // A small shared request cadence avoids bursting the unofficial endpoint.
+  target = 'ckb',
   concurrency = 3,
   minSpacingMs = 120,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -28,7 +29,7 @@ export async function translateMenuSubtitles(text, request, {
       nextRequestAt = slot + minSpacingMs;
       if (slot > now) await sleep(slot - now);
       check();
-      try { const result = await request(line, 'ckb'); check(); return result; }
+      try { const result = await request(line, target); check(); return result; }
       catch (error) { check(); if (attempt === 3) throw error; await sleep([800, 2500, 5000][attempt]); check(); }
     }
   };
@@ -46,7 +47,9 @@ export async function translateMenuSubtitles(text, request, {
   await Promise.all(Array.from({ length: Math.min(concurrency, groups.length) }, () => worker()));
   if (failure) throw failure;
   check();
-  return toVtt(results.flat());
+  const translated = results.flat();
+  if (target === 'ckb') { assertSoraniScript(translated); return toVtt(soraniRtl(translated)); }
+  return toVtt(translated);
 }
 
 // Reopening the same film during this app session can reuse its translated

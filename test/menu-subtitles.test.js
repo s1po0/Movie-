@@ -14,7 +14,7 @@ test('translates the complete original subtitle to Sorani while preserving every
   }, { minSpacingMs: 0, onProgress: (done, total) => progress.push([done, total]) });
   const original = parseSubtitles(sample), translated = parseSubtitles(result);
   assert.ok(result.startsWith('WEBVTT\n')); assert.equal(translated.length, original.length);
-  translated.forEach((cue, i) => { assert.equal(cue.start, original[i].start); assert.equal(cue.end, original[i].end); assert.equal(cue.text, `سۆرانی ${original[i].text}`); });
+  translated.forEach((cue, i) => { assert.equal(cue.start, original[i].start); assert.equal(cue.end, original[i].end); assert.equal(cue.text, `\u200fسۆرانی ${original[i].text}\u200f`); });
   assert.ok(calls.every(lang => lang === 'ckb')); assert.equal(maxActive, 3); assert.equal(progress.at(-1)[0], progress.at(-1)[1]);
 });
 
@@ -39,7 +39,7 @@ test('retries failed requests while preserving ordered cues', async () => {
     return text.split('\n').map(line => `سۆرانی ${line}`).join('\n');
   }, { minSpacingMs: 0, sleep: async () => {} });
   assert.ok(calls >= 4);
-  assert.deepEqual(parseSubtitles(result).map(c => c.text), parseSubtitles(sample).map(c => `سۆرانی ${c.text}`));
+  assert.deepEqual(parseSubtitles(result).map(c => c.text), parseSubtitles(sample).map(c => `\u200fسۆرانی ${c.text}\u200f`));
 });
 
 test('bounds the per-session cache and keys by the entire source track', () => {
@@ -51,4 +51,15 @@ test('bounds the per-session cache and keys by the entire source track', () => {
   assert.equal(cache.get('track one'), 'translation one');
   assert.equal(cache.get('track three'), 'translation three');
   assert.equal(cache.get('track one, different edition'), undefined);
+});
+
+test('rejects a long untranslated track instead of reporting success', async () => {
+  await assert.rejects(translateMenuSubtitles(sample, async text => text, {minSpacingMs: 0}), /Sorani script/);
+});
+
+test('other target languages are not marked RTL or forced to Sorani', async () => {
+  const calls = [];
+  const result = await translateMenuSubtitles(sample, async (text, target) => {calls.push(target); return text;}, {target: 'en', minSpacingMs: 0});
+  assert.ok(calls.every(c => c === 'en'));
+  assert.equal(parseSubtitles(result)[0].text, 'Line 0');
 });

@@ -54,7 +54,9 @@ export async function dailymotionMedia(playerUrl, getJson) {
   // translated from this exact video, so subtitle timing isn't borrowed from a different cut.
   const tracks = metadata?.subtitles?.data || {};
   let subtitleUrl = null, subtitleLanguage = null;
-  for (const lang of ['en', 'ar', 'en-auto']) {
+  const otherLanguages = Object.keys(tracks).filter(lang => /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-auto)?$/.test(lang) && !['en', 'ar', 'en-auto'].includes(lang));
+  otherLanguages.sort((a, b) => Number(a.endsWith('-auto')) - Number(b.endsWith('-auto')));
+  for (const lang of ['en', 'ar', 'en-auto', ...otherLanguages]) {
     const urls = tracks[lang]?.urls;
     const url = Array.isArray(urls) && urls.map(value => safeUrl(value, new Set(['static1.dmcdn.net', 'static2.dmcdn.net']))).find(Boolean);
     if (url) { subtitleUrl = url; subtitleLanguage = lang; break; }

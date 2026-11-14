@@ -50,6 +50,9 @@ try {
   adb('pull', `${base}.srt`, '/tmp/animecube-export.srt');
   const srt = readFileSync('/tmp/animecube-export.srt','utf8');
   if (!/[\u0600-\u06ff]/.test(srt) || (srt.match(/ --> /g) || []).length < 10) throw Error('Public SRT missing Sorani cues');
+  const texts = srt.split(/\r?\n\r?\n/).filter(block => block.includes(' --> ')).flatMap(block => block.split(/\r?\n/).slice(2));
+  if (!texts.length || texts.some(line => line && (!line.startsWith('\u200f') || !line.endsWith('\u200f')))) throw Error('SRT RTL marks missing');
+  console.log('::notice title=RTL SRT::Each subtitle line has RTL marks, with text remaining in logical order.');
   const metadata = JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type,width,height','-of','json','/tmp/animecube-export.mp4'],{encoding:'utf8'}));
   if (!metadata.streams?.some(s=>s.codec_type==='video') || Number(metadata.format?.duration) < 10) throw Error('Public MP4 invalid');
   const stream = metadata.streams.find(s=>s.codec_type==='video');

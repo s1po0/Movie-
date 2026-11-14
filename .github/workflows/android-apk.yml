@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') && !contains(github.event.head_commit.message, '[sorani-live-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -594,3 +594,13 @@ jobs:
             adb shell am start -W -n app.dimo.movies/.MainActivity
             adb shell pidof app.dimo.movies
             echo '::notice title=Real v23 to v24 upgrade::Exact signed APK upgraded in place and preserved private app data.'
+  sorani-live-check:
+    if: contains(github.event.head_commit.message, '[sorani-live-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/sorani-live-check.mjs

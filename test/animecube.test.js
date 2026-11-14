@@ -63,3 +63,10 @@ test('lists only resolutions actually present in an HLS master', () => {
   assert.deepEqual(manifestQualityLevels('#EXTM3U\n#EXTINF:4\nseg.ts'), []);
   assert.deepEqual(manifestQualityLevels('<html>'), []);
 });
+
+test('falls back to other available subtitle languages on trusted hosts', async () => {
+  const player = 'https://geo.dailymotion.com/player/x19jsm.html?video=kExample123';
+  const meta = {protected_delivery:false, qualities:{auto:[{type:'application/x-mpegURL',url:'https://cdndirector.dailymotion.com/x.m3u8'}]}, subtitles:{data:{'zh-auto':{urls:['https://static2.dmcdn.net/z.srt']}, fr:{urls:['https://static2.dmcdn.net/fr.srt']}, evil:{urls:['https://evil.example/x.srt']}}}};
+  const result = await dailymotionMedia(player, async () => meta);
+  assert.equal(result.subtitleLanguage, 'fr');
+});
