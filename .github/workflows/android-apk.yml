@@ -1,0 +1,560 @@
+name: Build Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug-apk:
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm test
+      - run: npm run android:sync
+      - name: Configure persistent Android signing when available
+        env:
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          REQUIRE_SIGNING: ${{ contains(github.event.head_commit.message, '[secure-signing-check]') }}
+        run: |
+          if [ "$REQUIRE_SIGNING" = true ]; then
+            test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD" || { echo '::error::Persistent signing secrets are required for release.'; exit 1; }
+          fi
+          if [ -n "$STORE_B64$STORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
+            test -n "$STORE_B64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
+            if ! printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/android-update.keystore" 2>/dev/null; then
+              echo '::error::The ANDROID_KEYSTORE_BASE64 secret is not valid base64.'; exit 1
+            fi
+            if [ ! -s "$RUNNER_TEMP/android-update.keystore" ]; then echo '::error::Decoded keystore is empty.'; exit 1; fi
+            chmod 600 "$RUNNER_TEMP/android-update.keystore"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-update.keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Build debug APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon assembleDebug > /tmp/gradle-build.log 2>&1 || {
+            grep -E -A 3 "error:|^FAILURE:|^\* What went wrong:|^\* Where:" /tmp/gradle-build.log | head -15 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dimo-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Check live movie search and playback
+        if: contains(github.event.head_commit.message, '[live-check]')
+        run: |
+          npm install --no-save --no-package-lock playwright-core
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/dimo-preview.log 2>&1 &
+          node scripts/live-check.mjs
+  catalog-check:
+    if: contains(github.event.head_commit.message, '[catalog-check]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/catalog-live-check.mjs
+  subtitle-menu-probe:
+    if: contains(github.event.head_commit.message, '[menu-probe]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm install --no-save --no-package-lock playwright-core && npm run build
+      - run: |
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/dimo-preview.log 2>&1 &
+          node scripts/probe-cc-dom.mjs
+  android-menu-check:
+    if: contains(github.event.head_commit.message, '[android-menu-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm install --no-save --no-package-lock playwright-core && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-menu-check.mjs
+  ui-check:
+    if: contains(github.event.head_commit.message, '[ui-check]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm install --no-save --no-package-lock playwright-core && npm run build
+      - run: |
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 5173 > /tmp/perde-preview.log 2>&1 &
+          node scripts/ui-check.mjs
+  android-speed-check:
+    if: contains(github.event.head_commit.message, '[speed-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-speed-check.mjs
+  android-update-check:
+    if: contains(github.event.head_commit.message, '[update-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-update-check.mjs
+  android-in-place-upgrade-check:
+    # An isolated, throwaway signing key is generated only for this test.
+    if: contains(github.event.head_commit.message, '[in-place-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync
+      - name: Build two versions with the same temporary test key
+        run: |
+          set -eu
+          keytool -genkeypair -keystore "$RUNNER_TEMP/test.keystore" -storepass test-password -keypass test-password -alias test -keyalg RSA -keysize 2048 -validity 7 -dname 'CN=Temporary Upgrade Test'
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/test.keystore" ANDROID_KEYSTORE_PASSWORD=test-password ANDROID_KEY_ALIAS=test ANDROID_KEY_PASSWORD=test-password
+          version=$(sed -n 's/^[[:space:]]*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle)
+          test "$(echo "$version" | wc -l)" -eq 1 && test "$version" -gt 1
+          echo "EXPECTED_VERSION=$version" >> "$GITHUB_ENV"
+          cp android/app/build.gradle "$RUNNER_TEMP/original-build.gradle"
+          sed -i "s/versionCode $version/versionCode $((version - 1))/" android/app/build.gradle
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-old.apk
+          cp "$RUNNER_TEMP/original-build.gradle" android/app/build.gradle
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-new.apk
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: bash scripts/android-in-place-upgrade-check.sh
+  secure-signing-upgrade-check:
+    if: contains(github.event.head_commit.message, '[secure-signing-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync
+      - name: Build current and next version with the configured signing key
+        env:
+          STORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$STORE_B64" && test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD" || { echo '::error::Persistent signing secrets are missing'; exit 1; }
+          if ! printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/secure-signing.keystore" 2>/dev/null; then
+            echo '::error::The ANDROID_KEYSTORE_BASE64 secret is not valid base64.'; exit 1
+          fi
+          if [ ! -s "$RUNNER_TEMP/secure-signing.keystore" ]; then echo '::error::Decoded keystore is empty.'; exit 1; fi
+          chmod 600 "$RUNNER_TEMP/secure-signing.keystore"
+          if ! keytool -list -keystore "$RUNNER_TEMP/secure-signing.keystore" -storetype PKCS12 -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1; then
+            echo '::error::The keystore, its password or key alias is incorrect.'; exit 1
+          fi
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/secure-signing.keystore"
+          version=$(sed -n 's/^[[:space:]]*versionCode \([0-9][0-9]*\).*/\1/p' android/app/build.gradle)
+          test "$(echo "$version" | wc -l)" -eq 1 && test "$version" -gt 1
+          echo "EXPECTED_VERSION=$((version + 1))" >> "$GITHUB_ENV"
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-old.apk
+          sed -i "s/versionCode $version/versionCode $((version + 1))/" android/app/build.gradle
+          (cd android && ./gradlew --no-daemon assembleDebug)
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/kurd-upgrade-new.apk
+      - name: Check compatibility with earlier published versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          current=$($signer verify --print-certs /tmp/kurd-upgrade-old.apk | awk '/certificate SHA-256 digest:/ && !seen {print $NF; seen=1}')
+          [[ "$current" =~ ^[0-9a-fA-F]{64}$ ]] || { echo '::error::Unable to read the current signing certificate'; exit 1; }
+          for version in 15 16; do
+            mkdir -p "/tmp/previous-$version"
+            gh release download "nali-v$version" --pattern Nali.apk --dir "/tmp/previous-$version"
+            previous=$($signer verify --print-certs "/tmp/previous-$version/Nali.apk" | awk '/certificate SHA-256 digest:/ && !seen {print $NF; seen=1}')
+            [[ "$previous" =~ ^[0-9a-fA-F]{64}$ ]] || { echo '::error::Unable to read a previous signing certificate'; exit 1; }
+            if [ "$current" = "$previous" ]; then result=matches; else result=differs; fi
+            echo "::notice title=Previous APK signing::The configured key $result version $version."
+          done
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: bash scripts/android-in-place-upgrade-check.sh
+  tomb-live-check:
+    if: contains(github.event.head_commit.message, '[tomb-live-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm install --no-save --no-package-lock playwright-core
+      - run: node scripts/tomb-live-check.mjs
+  tomb-network-check:
+    if: contains(github.event.head_commit.message, '[tomb-network-check]')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && node scripts/tomb-subtitle-network-check.mjs
+  tomb-android-check:
+    if: contains(github.event.head_commit.message, '[tomb-android-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install -r android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-tomb-check.mjs
+  offline-android-check:
+    if: contains(github.event.head_commit.message, '[offline-android-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and test Android
+        run: |
+          npm ci && npm test && npm run android:sync
+          cd android
+          ./gradlew --no-daemon assembleDebug > /tmp/hls-gradle.log 2>&1 || {
+            grep -E -A 3 'error:|^FAILURE:|^\* What went wrong:|^\* Where:|Could not' /tmp/hls-gradle.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
+      - name: Install media verification tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-offline-check.mjs && node scripts/android-hls-check.mjs
+  asian-live-check:
+    if: contains(github.event.head_commit.message, '[asian-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/asian-live-check.mjs
+  animecube-android-check:
+    if: contains(github.event.head_commit.message, '[animecube-android-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-animecube-check.mjs
+  offline-legacy-check:
+    if: contains(github.event.head_commit.message, '[offline-android-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell pm grant app.dimo.movies android.permission.READ_EXTERNAL_STORAGE && adb shell pm grant app.dimo.movies android.permission.WRITE_EXTERNAL_STORAGE && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-files-legacy-check.mjs
+  modern-storage-check:
+    if: contains(github.event.head_commit.message, '[modern-storage-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and test Android
+        run: |
+          npm ci && npm test && npm run android:sync
+          cd android
+          ./gradlew --no-daemon assembleDebug > /tmp/hls-gradle.log 2>&1 || {
+            grep -E -A 3 'error:|^FAILURE:|^\* What went wrong:|^\* Where:|Could not' /tmp/hls-gradle.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
+      - name: Install media verification tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-offline-check.mjs && SKIP_EXTERNAL=1 node scripts/android-hls-check.mjs
+  provider-download-probe:
+    if: contains(github.event.head_commit.message, '[provider-download-probe]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && node scripts/vidlink-download-probe.mjs
+  donghuastream-probe:
+    if: contains(github.event.head_commit.message, '[donghuastream-probe]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/donghuastream-probe.mjs
+  donghua-android-check:
+    if: contains(github.event.head_commit.message, '[donghua-android-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleDebug
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-donghua-check.mjs
+  donghua-quality-check:
+    if: contains(github.event.head_commit.message, '[donghua-quality-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node scripts/donghua-quality-probe.mjs
+  unsigned-local-signing-apk:
+    permissions:
+      contents: write
+    if: contains(github.event.head_commit.message, '[unsigned-local-signing-apk]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci && npm test && npm run android:sync && cd android && ./gradlew --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-local-signing-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+      - name: Export unsigned APK as Git blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY2'
+          import base64, json, os, subprocess
+          data = open('android/app/build/outputs/apk/release/app-release-unsigned.apk', 'rb').read()
+          payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+          result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
+          print('::notice title=Unsigned APK blob::'+json.loads(result.stdout)['sha'])
+          PY2
