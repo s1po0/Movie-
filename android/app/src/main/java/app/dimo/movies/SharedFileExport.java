@@ -19,6 +19,7 @@ import androidx.media3.common.Metadata;
 import androidx.media3.container.Mp4OrientationData;
 import androidx.media3.muxer.Mp4Muxer;
 import androidx.media3.muxer.Muxer;
+import androidx.media3.muxer.MuxerUtil;
 import com.google.common.collect.ImmutableList;
 import java.nio.ByteBuffer;
 import androidx.media3.common.MimeTypes;
@@ -158,7 +159,7 @@ final class SharedFileExport {
                     return track;
                 }
                 @Override public void writeSampleData(TrackToken track, ByteBuffer data, BufferInfo info) throws MuxerException { muxer.writeSampleData(track, data, info); }
-                @Override public void addMetadataEntry(Metadata.Entry metadata) { muxer.addMetadataEntry(metadata); }
+                @Override public void addMetadataEntry(Metadata.Entry metadata) { if (MuxerUtil.isMetadataSupported(metadata)) muxer.addMetadataEntry(metadata); }
                 @Override public void close() throws MuxerException { muxer.close(); }
             };
         }
