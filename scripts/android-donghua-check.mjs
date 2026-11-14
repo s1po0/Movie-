@@ -45,7 +45,7 @@ try {
     if (row?.export === 'failed') throw Error('Automatic export failed');
     return row?.export === 'done' ? row : null;
   }, 600000);
-  const base = `/sdcard/Movies/Kurd Movie/${exported.exportName}`;
+  const base = `/sdcard/${exported.exportName}`;
   adb('pull', `${base}.mp4`, '/tmp/animecube-export.mp4');
   adb('pull', `${base}.srt`, '/tmp/animecube-export.srt');
   const srt = readFileSync('/tmp/animecube-export.srt','utf8');

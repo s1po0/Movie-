@@ -69,7 +69,7 @@ try {
   const shared = await evaluate(`window.Capacitor.nativePromise('Offline','exportFiles',${JSON.stringify({ id: item.id })})`);
   if (!shared?.saved || !shared.name) throw Error('Separate file export failed');
   console.log('::notice title=Separate export stage::Native export completed');
-  const base = `/sdcard/Movies/Kurd Movie/${shared.name}`;
+  const base = `/sdcard/${shared.name}`;
   adb('pull', `${base}.mp4`, '/tmp/separate-video.mp4'); adb('pull', `${base}.srt`, '/tmp/separate-subtitle.srt');
   const { readFileSync } = await import('node:fs');
   const srt = readFileSync('/tmp/separate-subtitle.srt', 'utf8');
@@ -82,6 +82,7 @@ try {
   unlinkSync('/tmp/separate-frame.png'); unlinkSync('/tmp/separate-video.mp4'); unlinkSync('/tmp/separate-subtitle.srt');
   const exported = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(row=>row.id===${JSON.stringify(item.id)}))`);
   if (exported?.export !== 'done' || exported.exportName !== shared.name) throw Error('Separate export state missing');
+  await wait('root video indexed by gallery', () => adb('shell','content','query','--uri','content://media/external/video/media','--projection','_display_name').includes(`${shared.name}.mp4`), 30000);
   console.log('::notice title=Separate export stage::MP4 and SRT verified');
   if (process.env.SKIP_EXTERNAL !== '1') {
     await evaluate(`window.Capacitor.nativePromise('Offline','openExternal',${JSON.stringify({id:item.id})})`);
@@ -105,7 +106,7 @@ try {
     if (row?.state === 'failed' || row?.export === 'failed') throw Error('Automatic export failed');
     return row?.state === 'ready' && row.export === 'done' ? row : null;
   },180000);
-  const autoBase = `/sdcard/Movies/Kurd Movie/${autoRow.exportName}`;
+  const autoBase = `/sdcard/${autoRow.exportName}`;
   adb('pull', `${autoBase}.mp4`, '/tmp/auto-video.mp4'); adb('pull', `${autoBase}.srt`, '/tmp/auto-subtitle.srt');
   if (!readFileSync('/tmp/auto-subtitle.srt', 'utf8').includes('سڵاو جیهان')) throw Error('Automatic SRT was not saved');
   unlinkSync('/tmp/auto-video.mp4'); unlinkSync('/tmp/auto-subtitle.srt');

@@ -20,6 +20,9 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Environment;
+import android.provider.Settings;
+import androidx.activity.result.ActivityResult;
+import com.getcapacitor.annotation.ActivityCallback;
 import android.util.AtomicFile;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -250,17 +253,34 @@ public final class OfflinePlugin extends Plugin {
             }
         }
     }
+    // User-initiated only: Android 11+ protects the root of shared storage.
+    @PluginMethod public void ensureRootAccess(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            if (Environment.isExternalStorageManager()) { call.resolve(); return; }
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getContext().getPackageName()));
+                startActivityForResult(call, intent, "rootAccessResult");
+            } catch (Exception error) { call.reject("Unable to open storage permission settings", error); }
+        } else if (getPermissionState("legacyStorage") != PermissionState.GRANTED) {
+            requestPermissionForAlias("legacyStorage", call, "rootLegacyResult");
+        } else call.resolve();
+    }
+    @ActivityCallback private void rootAccessResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) call.resolve();
+        else call.reject("Root storage permission denied");
+    }
+    @PermissionCallback private void rootLegacyResult(PluginCall call) {
+        if (getPermissionState("legacyStorage") == PermissionState.GRANTED) call.resolve();
+        else call.reject("Root storage permission denied");
+    }
     @PluginMethod public void exportFiles(PluginCall call) {
         String id = call.getString("id", "");
         if (!safeId(id)) { call.reject("Invalid item"); return; }
-        if (Build.VERSION.SDK_INT < 29 && getPermissionState("legacyStorage") != PermissionState.GRANTED) {
-            requestPermissionForAlias("legacyStorage", call, "legacyStorageResult"); return;
-        }
+        boolean allowed = Build.VERSION.SDK_INT >= 30 ? Environment.isExternalStorageManager() : getPermissionState("legacyStorage") == PermissionState.GRANTED;
+        if (!allowed) { exportFinished(getContext(), id, false, null, null); call.reject("Root storage permission required"); return; }
         startSharedExport(call);
-    }
-    @PermissionCallback private void legacyStorageResult(PluginCall call) {
-        if (getPermissionState("legacyStorage") == PermissionState.GRANTED) startSharedExport(call);
-        else { exportFinished(getContext(), call.getString("id", ""), false, null, null); call.reject("Storage permission denied"); }
     }
     private void startSharedExport(PluginCall call) {
         Context c = getContext(); String id = call.getString("id", "");

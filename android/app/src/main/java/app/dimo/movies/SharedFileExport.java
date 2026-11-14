@@ -49,15 +49,14 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Makes a normal video and a separate matching subtitle in public Movies/Kurd Movie. */
+/** Makes independently movable MP4/SRT files in the root of shared internal storage. */
 @OptIn(markerClass = UnstableApi.class)
 final class SharedFileExport {
     private static Transformer active;
     static void start(Context context, String id, String title, MediaItem media, File subtitle, boolean hls, PluginCall call) {
         if (!GalleryExport.reserve(id)) { OfflinePlugin.exportFinished(context, id, false, null, null); call.reject("Another export is in progress"); return; }
         Context app = context.getApplicationContext();
-        File temporary = new File(app.getCacheDir(), "shared-export-" + id + ".mp4");
-        ScopedTarget target = null;
+        RootTarget target = null;
         try {
             byte[] source = readSubtitle(subtitle);
             // A UTF-8 BOM helps file managers and external players detect Sorani encoding.
@@ -66,12 +65,9 @@ final class SharedFileExport {
             if (safe.isEmpty()) safe = "Kurd Movie";
             if (safe.length() > 75) safe = safe.substring(0, 75);
             final String name = safe + " - " + UUID.randomUUID().toString().substring(0, 8);
-            if (temporary.exists() && !temporary.delete()) throw new IllegalStateException("Temporary file unavailable");
-            // Android 10+: write the MP4 directly to our pending shared-storage entry.
-            // It becomes visible to file managers only after both files are complete.
-            target = Build.VERSION.SDK_INT >= 29 ? ScopedTarget.create(app, name, srt) : null;
-            final ScopedTarget scoped = target;
-            final String outputPath = temporary.getAbsolutePath();
+            target = RootTarget.create(app, name, srt);
+            final RootTarget root = target;
+            final String outputPath = root.pendingVideo.getAbsolutePath();
             DefaultDataSource.Factory local = new DefaultDataSource.Factory(app, PlaceholderDataSource.FACTORY);
             androidx.media3.datasource.DataSource.Factory data = hls
                 ? new CacheDataSource.Factory().setCache(HlsDownloads.cache(app)).setUpstreamDataSourceFactory(local) : local;
@@ -79,37 +75,36 @@ final class SharedFileExport {
                 new DefaultDecoderFactory.Builder(app).build(), Clock.DEFAULT, new DefaultMediaSourceFactory(data));
             // No video effects or subtitle track: Transformer creates a normal, unburned MP4.
             active = new Transformer.Builder(app).setAssetLoaderFactory(loader)
-                .setMuxerFactory(new SharedMuxerFactory(scoped))
+                .setMuxerFactory(new SharedMuxerFactory(root))
                 .setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .addListener(new Transformer.Listener() {
                     @Override public void onCompleted(Composition composition, ExportResult result) {
                         new Thread(() -> {
                             try {
-                                if (scoped == null && temporary.length() <= 0) throw new IllegalStateException("Empty MP4");
-                                Uri video = scoped != null ? scoped.publish() : publishLegacy(app, temporary, name, srt);
+                                Uri video = root.publish();
                                 OfflinePlugin.exportFinished(app, id, true, name, video.toString());
                                 JSObject response = new JSObject(); response.put("saved", true);
-                                response.put("name", name); response.put("folder", "Movies/Kurd Movie"); call.resolve(response);
+                                response.put("name", name); response.put("folder", "Internal storage"); call.resolve(response);
                             } catch (Exception error) {
-                                if (scoped != null) scoped.discard();
+                                root.discard();
                                 OfflinePlugin.exportFinished(app, id, false, null, null);
                                 if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.e("SeparateExportDebug", "Save failed", error);
                                 call.reject("Saving files failed (" + error.getClass().getSimpleName() + ")", error);
-                            } finally { temporary.delete(); active = null; GalleryExport.clear(); }
+                            } finally { active = null; GalleryExport.clear(); }
                         }, "shared-export-copy").start();
                     }
                     @Override public void onError(Composition composition, ExportResult result, ExportException error) {
-                        if (scoped != null) scoped.discard();
-                        temporary.delete(); active = null; GalleryExport.clear();
+                        root.discard();
+                        active = null; GalleryExport.clear();
                         if ((app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.e("SeparateExportDebug", "Conversion failed", error);
                         OfflinePlugin.exportFinished(app, id, false, null, null); call.reject("Converting video failed", error);
                     }
                 }).build();
             try { active.start(media, outputPath); }
-            catch (Exception error) { if (scoped != null) scoped.discard(); throw error; }
+            catch (Exception error) { root.discard(); throw error; }
         } catch (Exception error) {
             if (target != null) target.discard();
-            temporary.delete(); active = null; GalleryExport.clear();
+            active = null; GalleryExport.clear();
             OfflinePlugin.exportFinished(app, id, false, null, null); call.reject("Unable to prepare separate files", error);
         }
     }
@@ -140,17 +135,16 @@ final class SharedFileExport {
     // InAppMuxer normally opens a filename itself, which cannot reopen /proc/self/fd
     // under Android's storage sandbox. Give Mp4Muxer a duplicate of the MediaStore fd.
     private static final class SharedMuxerFactory implements Muxer.Factory {
-        private final ScopedTarget scoped;
+        private final RootTarget root;
         private final InAppMuxer.Factory fallback = new InAppMuxer.Factory.Builder().build();
-        SharedMuxerFactory(ScopedTarget scoped) { this.scoped = scoped; }
+        SharedMuxerFactory(RootTarget root) { this.root = root; }
         @Override public ImmutableList<String> getSupportedSampleMimeTypes(@C.TrackType int type) {
             return fallback.getSupportedSampleMimeTypes(type);
         }
         @Override public Muxer create(String path) throws Muxer.MuxerException {
-            if (scoped == null) return fallback.create(path);
             final Mp4Muxer muxer;
             try {
-                ParcelFileDescriptor copy = ParcelFileDescriptor.dup(scoped.descriptor.getFileDescriptor());
+                ParcelFileDescriptor copy = ParcelFileDescriptor.dup(root.descriptor.getFileDescriptor());
                 muxer = new Mp4Muxer.Builder(new ParcelFileDescriptor.AutoCloseOutputStream(copy)).build();
             } catch (Exception error) { throw new Muxer.MuxerException("Cannot write shared MP4", error); }
             return new Muxer() {
@@ -165,65 +159,45 @@ final class SharedFileExport {
             };
         }
     }
-    private static final class ScopedTarget {
-        final ContentResolver resolver;
-        final Uri video, subtitle;
+    private static final class RootTarget {
+        final Context context;
+        final File pendingVideo, pendingSubtitle, video, subtitle;
         final ParcelFileDescriptor descriptor;
-        private ScopedTarget(ContentResolver resolver, Uri video, Uri subtitle, ParcelFileDescriptor descriptor) {
-            this.resolver = resolver; this.video = video; this.subtitle = subtitle; this.descriptor = descriptor;
+        private boolean videoPublished, subtitlePublished;
+        private RootTarget(Context context, File pv, File ps, File v, File sub, ParcelFileDescriptor fd) {
+            this.context = context; pendingVideo = pv; pendingSubtitle = ps; video = v; subtitle = sub; descriptor = fd;
         }
-        static ScopedTarget create(Context context, String name, byte[] srt) throws Exception {
-            ContentResolver resolver = context.getContentResolver(); Uri video = null, subtitle = null;
-            ParcelFileDescriptor descriptor = null;
+        static RootTarget create(Context context, String name, byte[] srt) throws Exception {
+            File folder = Environment.getExternalStorageDirectory();
+            File video = new File(folder, name + ".mp4"), subtitle = new File(folder, name + ".srt");
+            File pv = new File(folder, "." + name + ".mp4.pending"), ps = new File(folder, "." + name + ".srt.pending");
+            ParcelFileDescriptor fd = null; boolean pvCreated = false, psCreated = false;
             try {
-                video = insert(resolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI, name + ".mp4", "video/mp4");
-                subtitle = insert(resolver, MediaStore.Files.getContentUri("external"), name + ".srt", "application/x-subrip");
-                try (OutputStream out = resolver.openOutputStream(subtitle, "w")) {
-                    if (out == null) throw new IllegalStateException("Cannot write subtitle"); out.write(srt);
-                }
-                descriptor = resolver.openFileDescriptor(video, "rw");
-                if (descriptor == null) throw new IllegalStateException("Cannot open shared video");
-                return new ScopedTarget(resolver, video, subtitle, descriptor);
+                if (video.exists() || subtitle.exists() || !(pvCreated = pv.createNewFile())) throw new IllegalStateException("File exists");
+                if (!(psCreated = ps.createNewFile())) throw new IllegalStateException("File exists");
+                try (FileOutputStream out = new FileOutputStream(ps)) { out.write(srt); }
+                fd = ParcelFileDescriptor.open(pv, ParcelFileDescriptor.MODE_READ_WRITE);
+                return new RootTarget(context, pv, ps, video, subtitle, fd);
             } catch (Exception error) {
-                if (descriptor != null) try { descriptor.close(); } catch (Exception ignored) {}
-                if (video != null) resolver.delete(video, null, null);
-                if (subtitle != null) resolver.delete(subtitle, null, null);
-                throw error;
+                if (fd != null) try { fd.close(); } catch (Exception ignored) {}
+                if (pvCreated) pv.delete(); if (psCreated) ps.delete(); throw error;
             }
         }
         Uri publish() throws Exception {
             if (descriptor.getStatSize() <= 0) throw new IllegalStateException("Empty shared MP4");
             descriptor.close();
-            ContentValues ready = new ContentValues(); ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            if (resolver.update(subtitle, ready, null, null) != 1 || resolver.update(video, ready, null, null) != 1)
-                throw new IllegalStateException("Cannot publish files");
-            return video;
+            if (!pendingSubtitle.renameTo(subtitle)) throw new IllegalStateException("Cannot save subtitle");
+            subtitlePublished = true;
+            if (!pendingVideo.renameTo(video)) throw new IllegalStateException("Cannot save video");
+            videoPublished = true;
+            MediaScannerConnection.scanFile(context, new String[] {video.getAbsolutePath(), subtitle.getAbsolutePath()},
+                new String[] {"video/mp4", "application/x-subrip"}, null);
+            return FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", video);
         }
         void discard() {
             try { descriptor.close(); } catch (Exception ignored) {}
-            try { resolver.delete(video, null, null); } catch (Exception ignored) {}
-            try { resolver.delete(subtitle, null, null); } catch (Exception ignored) {}
+            pendingVideo.delete(); pendingSubtitle.delete();
+            if (videoPublished) video.delete(); if (subtitlePublished) subtitle.delete();
         }
-    }
-    private static Uri insert(ContentResolver resolver, Uri collection, String name, String mime) {
-        ContentValues v = new ContentValues(); v.put(MediaStore.Downloads.DISPLAY_NAME,name); v.put(MediaStore.Downloads.MIME_TYPE,mime);
-        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Kurd Movie"); v.put(MediaStore.Downloads.IS_PENDING,1);
-        Uri result = resolver.insert(collection,v); if (result == null) throw new IllegalStateException("Cannot create file"); return result;
-    }
-    @SuppressWarnings("deprecation") private static Uri publishLegacy(Context c, File file, String name, byte[] srt) throws Exception {
-        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Kurd Movie");
-        if (!folder.isDirectory() && !folder.mkdirs()) throw new IllegalStateException("Cannot create download directory");
-        File video = new File(folder,name + ".mp4"), sub = new File(folder,name + ".srt");
-        boolean createdVideo = false, createdSub = false;
-        try {
-            createdVideo = video.createNewFile(); if (!createdVideo) throw new IllegalStateException("File exists");
-            createdSub = sub.createNewFile(); if (!createdSub) throw new IllegalStateException("File exists");
-            try (FileInputStream in = new FileInputStream(file); FileOutputStream out = new FileOutputStream(video)) {
-                byte[] b = new byte[65536]; int n; while ((n=in.read(b)) != -1) out.write(b,0,n);
-            }
-            try (FileOutputStream out = new FileOutputStream(sub)) { out.write(srt); }
-            MediaScannerConnection.scanFile(c,new String[]{video.getAbsolutePath(),sub.getAbsolutePath()},new String[]{"video/mp4","application/x-subrip"},null);
-            return FileProvider.getUriForFile(c,c.getPackageName()+".fileprovider",video);
-        } catch (Exception error) { if (createdVideo) video.delete(); if (createdSub) sub.delete(); throw error; }
     }
 }

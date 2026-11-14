@@ -28,12 +28,12 @@ try {
   });
   const result=await evalJS(`window.Capacitor.nativePromise('Offline','exportFiles',${JSON.stringify({id:item.id})})`);
   if (!result?.saved || !result?.name) throw Error('Legacy export failed');
-  const base=`/sdcard/Movies/Kurd Movie/${result.name}`;
+  const base=`/sdcard/${result.name}`;
   adb('pull',`${base}.mp4`,'/tmp/legacy-video.mp4'); adb('pull',`${base}.srt`,'/tmp/legacy-subtitle.srt');
   if(!readFileSync('/tmp/legacy-subtitle.srt','utf8').includes('سڵاو جیهان')) throw Error('Legacy SRT incorrect');
   const meta=JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type,codec_name','-of','json','/tmp/legacy-video.mp4'],{encoding:'utf8'}));
   if(!meta.streams?.some(s=>s.codec_type==='video')||Number(meta.format?.duration)<1) throw Error('Legacy MP4 invalid');
   unlinkSync('/tmp/legacy-video.mp4'); unlinkSync('/tmp/legacy-subtitle.srt');
-  console.log('::notice title=Legacy shared export::Android 9 saved separate MP4 and SRT in public Movies with storage permission.');
+  console.log('::notice title=Legacy shared export::Android 9 saved separate MP4 and SRT in the root of internal storage with permission.');
 } catch(error) { console.log(`::error title=Legacy shared export::${String(error.message).split('\n')[0]}`); try { for (const line of adb('logcat','-d','-s','SeparateExportDebug:E','*:S').split('\n')) if (line.includes('SeparateExportDebug') || line.includes('Exception') || line.includes('SharedFileExport')) console.log(`::error title=Legacy export log::${line}`); } catch {} process.exitCode=1; }
 finally { socket?.close(); }
