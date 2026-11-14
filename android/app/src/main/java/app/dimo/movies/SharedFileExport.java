@@ -4,6 +4,7 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.media.MediaScannerConnection;
+import android.media.MediaCodec.BufferInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -12,6 +13,14 @@ import android.provider.MediaStore;
 import androidx.annotation.OptIn;
 import androidx.core.content.FileProvider;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.C;
+import androidx.media3.common.Format;
+import androidx.media3.common.Metadata;
+import androidx.media3.container.Mp4OrientationData;
+import androidx.media3.muxer.Mp4Muxer;
+import androidx.media3.muxer.Muxer;
+import com.google.common.collect.ImmutableList;
+import java.nio.ByteBuffer;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.Clock;
 import androidx.media3.common.util.UnstableApi;
@@ -60,7 +69,7 @@ final class SharedFileExport {
             // It becomes visible to file managers only after both files are complete.
             target = Build.VERSION.SDK_INT >= 29 ? ScopedTarget.create(app, name, srt) : null;
             final ScopedTarget scoped = target;
-            final String outputPath = scoped == null ? temporary.getAbsolutePath() : scoped.outputPath();
+            final String outputPath = temporary.getAbsolutePath();
             DefaultDataSource.Factory local = new DefaultDataSource.Factory(app, PlaceholderDataSource.FACTORY);
             androidx.media3.datasource.DataSource.Factory data = hls
                 ? new CacheDataSource.Factory().setCache(HlsDownloads.cache(app)).setUpstreamDataSourceFactory(local) : local;
@@ -68,7 +77,7 @@ final class SharedFileExport {
                 new DefaultDecoderFactory.Builder(app).build(), Clock.DEFAULT, new DefaultMediaSourceFactory(data));
             // No video effects or subtitle track: Transformer creates a normal, unburned MP4.
             active = new Transformer.Builder(app).setAssetLoaderFactory(loader)
-                .setMuxerFactory(new InAppMuxer.Factory.Builder().build())
+                .setMuxerFactory(new SharedMuxerFactory(scoped))
                 .setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .addListener(new Transformer.Listener() {
                     @Override public void onCompleted(Composition composition, ExportResult result) {
@@ -126,6 +135,34 @@ final class SharedFileExport {
         return out.toString();
     }
     private static String stamp(Matcher m, int i) { return String.format(Locale.ROOT, "%s:%s:%s,%s",m.group(i),m.group(i+1),m.group(i+2),m.group(i+3)); }
+    // InAppMuxer normally opens a filename itself, which cannot reopen /proc/self/fd
+    // under Android's storage sandbox. Give Mp4Muxer a duplicate of the MediaStore fd.
+    private static final class SharedMuxerFactory implements Muxer.Factory {
+        private final ScopedTarget scoped;
+        private final InAppMuxer.Factory fallback = new InAppMuxer.Factory.Builder().build();
+        SharedMuxerFactory(ScopedTarget scoped) { this.scoped = scoped; }
+        @Override public ImmutableList<String> getSupportedSampleMimeTypes(@C.TrackType int type) {
+            return fallback.getSupportedSampleMimeTypes(type);
+        }
+        @Override public Muxer create(String path) throws Muxer.MuxerException {
+            if (scoped == null) return fallback.create(path);
+            final Mp4Muxer muxer;
+            try {
+                ParcelFileDescriptor copy = ParcelFileDescriptor.dup(scoped.descriptor.getFileDescriptor());
+                muxer = new Mp4Muxer.Builder(new ParcelFileDescriptor.AutoCloseOutputStream(copy)).build();
+            } catch (Exception error) { throw new Muxer.MuxerException("Cannot write shared MP4", error); }
+            return new Muxer() {
+                @Override public TrackToken addTrack(Format format) throws MuxerException {
+                    TrackToken track = muxer.addTrack(format);
+                    if (MimeTypes.isVideo(format.sampleMimeType)) muxer.addMetadataEntry(new Mp4OrientationData(format.rotationDegrees));
+                    return track;
+                }
+                @Override public void writeSampleData(TrackToken track, ByteBuffer data, BufferInfo info) throws MuxerException { muxer.writeSampleData(track, data, info); }
+                @Override public void addMetadataEntry(Metadata.Entry metadata) { muxer.addMetadataEntry(metadata); }
+                @Override public void close() throws MuxerException { muxer.close(); }
+            };
+        }
+    }
     private static final class ScopedTarget {
         final ContentResolver resolver;
         final Uri video, subtitle;
@@ -152,7 +189,6 @@ final class SharedFileExport {
                 throw error;
             }
         }
-        String outputPath() { return "/proc/self/fd/" + descriptor.getFd(); }
         Uri publish() throws Exception {
             if (descriptor.getStatSize() <= 0) throw new IllegalStateException("Empty shared MP4");
             descriptor.close();
