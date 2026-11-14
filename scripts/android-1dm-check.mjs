@@ -8,7 +8,7 @@ async function connect(){
   const page=await wait('WebView',async()=>{try{return (await(await fetch('http://127.0.0.1:9222/json')).json()).find(x=>x.type==='page'&&/localhost/.test(x.url));}catch{return null;}});
   const url=new URL(page.webSocketDebuggerUrl);url.host='127.0.0.1:9222';socket=new WebSocket(url.href);
   await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject});
-  socket.onmessage=e=>{const d=JSON.parse(e.data),p=pending.get(d.id);if(!p)return;pending.delete(d.id);d.error?p.reject(Error(d.error.message)):p.resolve(d.result.value)};
+  socket.onmessage=e=>{const d=JSON.parse(e.data),p=pending.get(d.id);if(!p)return;pending.delete(d.id);d.error?p.reject(Error(d.error.message)):p.resolve(d.result.result.value)};
 }
 const evaluate=expression=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,awaitPromise:true,returnByValue:true}}));});
 try {

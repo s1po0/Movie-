@@ -15,17 +15,19 @@ try {
     await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject});
   }
   async function request(grant) {
-    adb('logcat','-c'); await connect();
+    adb('logcat','-c'); console.log(`::notice title=Root permission phase::connecting grant=${grant}`); await connect();
     // The WebView debugging socket may detach as the app goes into background.
     socket.send(JSON.stringify({id:1,method:'Runtime.evaluate',params:{expression:"window.Capacitor.nativePromise('Offline','ensureRootAccess',{}).catch(()=>{}); 'started'"}}));
     await wait('storage settings visible',()=>/com\.android\.settings/.test(adb('shell','dumpsys','activity','activities').split('\n').filter(x=>/mResumedActivity|topResumedActivity/.test(x)).join(' ')));
+    console.log('::notice title=Root permission phase::settings displayed');
     if(grant) adb('shell','appops','set','app.dimo.movies','MANAGE_EXTERNAL_STORAGE','allow');
     adb('shell','input','keyevent','4');
     const expected=grant?'granted':'denied';
     await wait('native permission '+expected,()=>adb('logcat','-d','-s','RootPermissionCheck:I','*:S').includes(expected));
+    console.log(`::notice title=Root permission phase::callback ${expected}`);
     socket.close();
   }
   await request(false); await request(true);
   console.log('::notice title=Root storage permission::Settings opened on user request; denied and granted results verified.');
-} catch(error) {console.log('::error title=Root storage permission::'+String(error.message).split('\n')[0]);process.exitCode=1;}
+} catch(error) {console.log('::error title=Root storage permission::'+String(error.message).split('\n')[0]);try{console.log('::notice title=Permission process::'+adb('shell','pidof','app.dimo.movies').trim())}catch{console.log('::notice title=Permission process::Not running')};process.exitCode=1;}
 finally {socket?.close();}
