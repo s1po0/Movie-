@@ -65,3 +65,16 @@ export async function dailymotionMedia(playerUrl, getJson) {
     .filter(value => [380, 480, 720, 1080, 1440, 2160].includes(value)).sort((a,b) => a-b);
   return { streamUrl, subtitleUrl, subtitleLanguage, qualityLevels };
 }
+
+// Read actual HLS variants instead of treating metadata encoding labels as availability.
+export function manifestQualityLevels(text) {
+  if (typeof text !== 'string' || !/^#EXTM3U(?:\r?\n|$)/.test(text)) return [];
+  const heights = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+    const resolution = line.match(/(?:\:|,)RESOLUTION=(\d+)x(\d+)(?:,|$)/i);
+    const height = Number(resolution?.[2]);
+    if (height > 0 && height <= 4320) heights.push(height);
+  }
+  return [...new Set(heights)].sort((a, b) => a - b);
+}

@@ -17,7 +17,7 @@ import { findMovieSubtitles } from './subtitle-discovery.js';
 import { translateMenuSubtitles, withSubtitleTrack, createMenuTranslationCache } from './menu-subtitles.js';
 import { findUpdate, releaseApi } from './update.js';
 import { isOfflineDownloadable, offlineSubtitle, offlineProgress } from './offline.js';
-import { dailymotionMedia } from './animecube.js';
+import { dailymotionMedia, manifestQualityLevels } from './animecube.js';
 import { donghuaEpisodeSource } from './donghuastream.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
@@ -319,6 +319,9 @@ async function openDonghuaSource() {
   try {
     const source = await donghuaEpisodeSource(episode, url => subtitleHttp(url, 'text'));
     const media = await dailymotionMedia(source.playerUrl, getJson);
+    // Metadata may advertise 4K when the actual master contains only a low-res variant.
+    try { media.qualityLevels = manifestQualityLevels(await subtitleHttp(media.streamUrl, 'text')); }
+    catch { media.qualityLevels = []; }
     if (session !== playerSession) return;
     const title = `${current.title} · S03E${String(episode).padStart(2, '0')}`;
     closePlayer();

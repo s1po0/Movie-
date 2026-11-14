@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { animeCubeTombSeason3Source, dailymotionMedia } from '../src/animecube.js';
+import { animeCubeTombSeason3Source, dailymotionMedia, manifestQualityLevels } from '../src/animecube.js';
 
 const registry = { bySeason: { 'tomb-of-fallen-gods': { 'primary-1': { 'tab-1754560267416': 'test_version' } } } };
 
@@ -55,4 +55,11 @@ test('selects Arabic or auto English subtitle and only advertised video qualitie
   assert.equal(arabic.subtitleLanguage, 'ar'); assert.deepEqual(arabic.qualityLevels, [380,720,2160]);
   delete metadata.subtitles.data.ar;
   assert.equal((await dailymotionMedia(player, async () => metadata)).subtitleLanguage, 'en-auto');
+});
+
+test('lists only resolutions actually present in an HLS master', () => {
+  const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=512x216\nlow.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080,BANDWIDTH=123\nhigh.m3u8\n';
+  assert.deepEqual(manifestQualityLevels(master), [216, 1080]);
+  assert.deepEqual(manifestQualityLevels('#EXTM3U\n#EXTINF:4\nseg.ts'), []);
+  assert.deepEqual(manifestQualityLevels('<html>'), []);
 });

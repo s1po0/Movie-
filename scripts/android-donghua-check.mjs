@@ -28,8 +28,9 @@ try {
   if (source !== 'ready') throw Error('DonghuaStream or Dailymotion source unavailable');
   await wait('real source subtitle', () => evaluate("document.querySelector('#subtitle-status')?.textContent.includes('بارکرا')"), 90000);
   const qualities = await evaluate("Array.from(document.querySelector('#offline-quality').options).map(x=>x.value)");
-  if (!qualities.includes('2160') || !qualities.includes('380')) throw Error('Available quality choices missing');
-  await evaluate("document.querySelector('#offline-quality').value='380'");
+  const quality = Number(qualities[0]);
+  if (!Number.isInteger(quality) || quality < 1 || quality > 4320) throw Error('Actual manifest quality unavailable');
+  await evaluate(`document.querySelector('#offline-quality').value='${quality}'`);
   // Do not inject or confirm a fabricated subtitle: the app must translate the real source.
   await evaluate("document.querySelector('[data-action=download-current]').click()");
   await wait('download queued', () => evaluate("Boolean(document.querySelector('#offline-list'))"), 120000);
@@ -49,10 +50,10 @@ try {
   adb('pull', `${base}.srt`, '/tmp/animecube-export.srt');
   const srt = readFileSync('/tmp/animecube-export.srt','utf8');
   if (!/[\u0600-\u06ff]/.test(srt) || (srt.match(/ --> /g) || []).length < 10) throw Error('Public SRT missing Sorani cues');
-  const metadata = JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type','-of','json','/tmp/animecube-export.mp4'],{encoding:'utf8'}));
+  const metadata = JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type,width,height','-of','json','/tmp/animecube-export.mp4'],{encoding:'utf8'}));
   if (!metadata.streams?.some(s=>s.codec_type==='video') || Number(metadata.format?.duration) < 10) throw Error('Public MP4 invalid');
   const stream = metadata.streams.find(s=>s.codec_type==='video');
-  console.log(`::notice title=Real exported video::Episode 25 duration ${metadata.format.duration}s; requested up to 380p`);
+  console.log(`::notice title=Real exported video::Episode 25 duration ${metadata.format.duration}s; requested up to ${quality}p; exported ${stream.width}x${stream.height}`);
   unlinkSync('/tmp/animecube-export.mp4'); unlinkSync('/tmp/animecube-export.srt');
   console.log('::notice title=Real public files::DonghuaStream episode 25 public MP4 and separate Sorani SRT verified');
   const saved = adb('shell','run-as','app.dimo.movies','cat',`files/offline-${id}.vtt`);
