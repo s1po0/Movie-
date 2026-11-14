@@ -678,9 +678,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/ec83e47d21f98fdc964bd3b196adc2305761a386 > /tmp/old.apk
-          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/6d327dee388eff05d6a483697e125794f010f7a0 > /tmp/new.apk
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/473608380a0062c93017d58d96b6cdda9313154e > /tmp/new.apk
           echo 'ee2a6c44ace52c41ab920098de6f329413261da665ed38acde0136cb13ba6ae5  /tmp/old.apk' | sha256sum -c -
-          echo 'ff01686897802289b1d157c1174dc88cb4ca2a0b7d0dae262b7757a519a31da7  /tmp/new.apk' | sha256sum -c -
+          echo '4dbf1cb25b93b1e1f7db4f0e809058ddd592cd9c1956483a293e0351280e014b  /tmp/new.apk' | sha256sum -c -
       - name: Enable hardware virtualization
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

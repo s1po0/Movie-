@@ -52,6 +52,7 @@ try {
     await page.locator('select#episode-season').waitFor();
     await page.locator('#episode-season').selectOption('3');
     await page.locator('#episode-number').selectOption('52');
+    await page.locator('[data-action=one-dm]').waitFor();
     await page.locator('[data-action=play-episode]').click();
     await page.locator('#player-modal iframe[src*="/tv/206343/3/52"]').waitFor();
     await page.locator('#player-modal [data-action=close-player]').click();
@@ -63,7 +64,9 @@ try {
     await page.locator('#add-form [name="url"]').fill('https://example.com/movie.mp4');
     await page.locator('#add-form button[type="submit"]').click();
     await page.locator('#modal .saved-title').getByText('My saved movie').waitFor();
-    await page.locator('#modal [data-action="close"]').click();
+    await page.locator('#modal .saved-title').getByText('My saved movie').click();
+    await page.locator('#player-modal [data-action=one-dm]').waitFor();
+    await page.locator('#player-modal [data-action=close-player]').click();
     await page.locator('[data-play="cinebloom-155"]').first().click();
     await page.locator('#player-modal iframe').waitFor();
     if (await page.locator('#player-modal').getByText('کردنەوە لە پەڕەیەکی تر').count()) throw Error('Removed external player link is visible for movies');
