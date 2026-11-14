@@ -526,6 +526,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: node scripts/donghua-quality-probe.mjs
   unsigned-local-signing-apk:
+    permissions:
+      contents: write
     if: contains(github.event.head_commit.message, '[unsigned-local-signing-apk]')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -545,3 +547,14 @@ jobs:
           name: unsigned-local-signing-apk
           path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
+      - name: Export unsigned APK as Git blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY2'
+          import base64, json, os, subprocess
+          data = open('android/app/build/outputs/apk/release/app-release-unsigned.apk', 'rb').read()
+          payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+          result = subprocess.run(['gh','api','--method','POST','repos/'+os.environ['GITHUB_REPOSITORY']+'/git/blobs','--input','-'], input=payload, stdout=subprocess.PIPE, check=True)
+          print('::notice title=Unsigned APK blob::'+json.loads(result.stdout)['sha'])
+          PY2
