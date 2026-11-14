@@ -14,7 +14,7 @@ try {
    if(response.status!==200) {console.log(`::notice title=Episode ${ep} metadata::HTTP ${response.status}`);continue;}
    const m=JSON.parse(response.text);
    console.log(`::notice title=Episode ${ep} metadata::duration=${m.duration}, protected=${m.protected_delivery}, formats=${Object.keys(m.stream_formats||{}).join(',')}, captions=${Object.keys(m.subtitles?.data||{}).join(',')}`);
-   for(const key of ['en','en-auto']) {
+   for(const key of ['en','en-auto','ar']) {
     const sub=m.subtitles?.data?.[key]?.urls?.[0]; if(!sub) continue;
     const result=await get(sub);const cues=parseSubtitles(result.text);
     const preview=cues.slice(0,2).map(x=>x.text.replace(/[\r\n]/g,' ').slice(0,100)).join(' | ');
