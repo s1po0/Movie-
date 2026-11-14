@@ -34,7 +34,7 @@ export async function dailymotionMedia(playerUrl, getJson) {
   try { player = new URL(playerUrl); } catch { throw new Error('Invalid player URL'); }
   const id = player.searchParams.get('video');
   if (player.protocol !== 'https:' || player.hostname !== 'geo.dailymotion.com' || player.port || player.username || player.password ||
-      player.pathname !== '/player/x1h6z6.html' || !id || !/^[a-zA-Z0-9]{1,100}$/.test(id)) throw new Error('Invalid player URL');
+      !/^\/player\/x[0-9a-z]+\.html$/.test(player.pathname) || !id || !/^[a-zA-Z0-9]{1,100}$/.test(id)) throw new Error('Invalid player URL');
   if (typeof getJson !== 'function') throw new TypeError('A JSON requester is required');
   const metadata = await getJson(`https://www.dailymotion.com/player/metadata/video/${id}`);
   if (metadata?.error || metadata?.protected_delivery !== false) throw new Error('Protected or unavailable video');
@@ -50,9 +50,18 @@ export async function dailymotionMedia(playerUrl, getJson) {
   const streamUrl = streams.filter(item => /^application\/(x-mpegurl|vnd\.apple\.mpegurl)$/i.test(item?.type || ''))
     .map(item => safeUrl(item.url, manifestHosts)).find(Boolean);
   if (!streamUrl) throw new Error('HLS stream unavailable');
-  const english = metadata?.subtitles?.data?.en?.urls;
-  const subtitleUrl = Array.isArray(english)
-    ? english.map(url => safeUrl(url, new Set(['static1.dmcdn.net', 'static2.dmcdn.net']))).find(Boolean) || null
-    : null;
-  return { streamUrl, subtitleUrl };
+  // Prefer human English, then Arabic, then auto-generated English. They are
+  // translated from this exact video, so subtitle timing isn't borrowed from a different cut.
+  const tracks = metadata?.subtitles?.data || {};
+  let subtitleUrl = null, subtitleLanguage = null;
+  for (const lang of ['en', 'ar', 'en-auto']) {
+    const urls = tracks[lang]?.urls;
+    const url = Array.isArray(urls) && urls.map(value => safeUrl(value, new Set(['static1.dmcdn.net', 'static2.dmcdn.net']))).find(Boolean);
+    if (url) { subtitleUrl = url; subtitleLanguage = lang; break; }
+  }
+  // These are the qualities advertised for this video, not a guarantee that
+  // the CDN or the device will be able to play/download each variant.
+  const qualityLevels = Object.keys(metadata?.stream_formats || {}).map(Number)
+    .filter(value => [380, 480, 720, 1080, 1440, 2160].includes(value)).sort((a,b) => a-b);
+  return { streamUrl, subtitleUrl, subtitleLanguage, qualityLevels };
 }

@@ -39,11 +39,20 @@ test('discovers non-protected HLS and English subtitles only from allowed hosts'
     assert.equal(url, 'https://www.dailymotion.com/player/metadata/video/kExample123');
     return meta;
   });
-  assert.deepEqual(result, {streamUrl:'https://cdndirector.dailymotion.com/cdn/manifest/video/123.m3u8?sec=abc',subtitleUrl:'https://static2.dmcdn.net/subtitle_en.srt'});
+  assert.deepEqual(result, {streamUrl:'https://cdndirector.dailymotion.com/cdn/manifest/video/123.m3u8?sec=abc',subtitleUrl:'https://static2.dmcdn.net/subtitle_en.srt',subtitleLanguage:'en',qualityLevels:[]});
   await assert.rejects(dailymotionMedia('https://evil.example/player/x1h6z6.html?video=kExample123', async () => meta), /Invalid player/);
   await assert.rejects(dailymotionMedia(player, async () => ({...meta, protected_delivery:true})), /Protected/);
   await assert.rejects(dailymotionMedia(player, async () => ({...meta, protected_delivery:undefined})), /Protected/);
   await assert.rejects(dailymotionMedia(player, async () => ({...meta, qualities:{auto:[{type:'application/x-mpegURL',url:'https://evil.example/playlist.m3u8'}]}})), /HLS stream unavailable/);
   const withoutSubtitle = await dailymotionMedia(player, async () => ({...meta, subtitles:{data:{en:{urls:['https://evil.example/x.srt']}}}}));
   assert.equal(withoutSubtitle.subtitleUrl, null);
+});
+
+test('selects Arabic or auto English subtitle and only advertised video qualities', async () => {
+  const player = 'https://geo.dailymotion.com/player/x19jsm.html?video=kExample123';
+  const metadata = { protected_delivery:false, stream_formats:{380:'fMP4',720:'fMP4',2160:'fMP4', 9999:'invalid'}, qualities:{auto:[{type:'application/x-mpegURL',url:'https://cdndirector.dailymotion.com/x.m3u8'}]}, subtitles:{data:{ar:{urls:['https://static2.dmcdn.net/ar.srt']},'en-auto':{urls:['https://static2.dmcdn.net/auto.srt']}}} };
+  const arabic = await dailymotionMedia(player, async () => metadata);
+  assert.equal(arabic.subtitleLanguage, 'ar'); assert.deepEqual(arabic.qualityLevels, [380,720,2160]);
+  delete metadata.subtitles.data.ar;
+  assert.equal((await dailymotionMedia(player, async () => metadata)).subtitleLanguage, 'en-auto');
 });

@@ -88,7 +88,7 @@ public final class OfflinePlugin extends Plugin {
         String ext = path.endsWith(".mp4") ? "mp4" : path.endsWith(".webm") ? "webm" : "";
         if (path.endsWith(".m3u8")) {
             int maxHeight = call.getInt("maxHeight", 720);
-            if (maxHeight != 360 && maxHeight != 480 && maxHeight != 720) { call.reject("Invalid quality"); return; }
+            if (maxHeight != 360 && maxHeight != 380 && maxHeight != 480 && maxHeight != 720 && maxHeight != 1080 && maxHeight != 1440 && maxHeight != 2160) { call.reject("Invalid quality"); return; }
             startHls(call, title, uri, vtt, maxHeight); return;
         }
         if (title.isEmpty() || title.length() > 200 || !"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null || ext.isEmpty() || !vtt.startsWith("WEBVTT\n") || vtt.length() > 2_000_000) {
