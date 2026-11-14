@@ -4,6 +4,8 @@ import android.app.DownloadManager;
 import android.Manifest;
 import android.os.Build;
 import android.content.Context;
+import android.content.ComponentName;
+import android.content.pm.ApplicationInfo;
 import android.content.Intent;
 import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
@@ -268,12 +270,37 @@ public final class OfflinePlugin extends Plugin {
     }
     @ActivityCallback private void rootAccessResult(PluginCall call, ActivityResult result) {
         if (call == null) return;
-        if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) call.resolve();
-        else call.reject("Root storage permission denied");
+        boolean granted = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager();
+        if ((getContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) android.util.Log.i("RootPermissionCheck", granted ? "granted" : "denied");
+        if (granted) call.resolve(); else call.reject("Root storage permission denied");
     }
     @PermissionCallback private void rootLegacyResult(PluginCall call) {
         if (getPermissionState("legacyStorage") == PermissionState.GRANTED) call.resolve();
         else call.reject("Root storage permission denied");
+    }
+    // Explicit 1DM integration per the vendor's documented Android intents.
+    // Only user-selected URLs are passed; cookies and other private headers are not shared.
+    @PluginMethod public void openOneDm(PluginCall call) {
+        try {
+            Uri uri = Uri.parse(call.getString("url", ""));
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getHost().isEmpty() || uri.getUserInfo() != null)
+                throw new IllegalArgumentException("HTTPS URL required");
+            boolean page = call.getBoolean("page", true);
+            String component = page ? "acr.browser.lightning.activity.BrowserLauncher" : "idm.internet.download.manager.Downloader";
+            for (String pkg : new String[] {"idm.internet.download.manager", "idm.internet.download.manager.plus", "idm.internet.download.manager.adm.lite"}) {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                intent.setComponent(new ComponentName(pkg, component));
+                if (!page) {
+                    String title = call.getString("title", "Kurd Movie");
+                    if (title.length() > 120) title = title.substring(0, 120);
+                    intent.putExtra("extra_filename", title);
+                    intent.putExtra("force_editor", true);
+                }
+                try { getActivity().startActivity(intent); call.resolve(); return; }
+                catch (android.content.ActivityNotFoundException | SecurityException ignored) { /* Try another installed edition. */ }
+            }
+            call.reject("1DM is not installed or cannot open this link");
+        } catch (Exception error) { call.reject("Unable to open 1DM", error); }
     }
     @PluginMethod public void exportFiles(PluginCall call) {
         String id = call.getString("id", "");
