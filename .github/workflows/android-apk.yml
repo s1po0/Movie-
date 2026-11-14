@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -477,3 +477,13 @@ jobs:
         with:
           node-version: 22
       - run: npm ci && node scripts/vidlink-download-probe.mjs
+  donghuastream-probe:
+    if: contains(github.event.head_commit.message, '[donghuastream-probe]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/donghuastream-probe.mjs
