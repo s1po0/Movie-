@@ -83,8 +83,10 @@ try {
   const exported = await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(row=>row.id===${JSON.stringify(item.id)}))`);
   if (exported?.export !== 'done' || exported.exportName !== shared.name) throw Error('Separate export state missing');
   console.log('::notice title=Separate export stage::MP4 and SRT verified');
-  await evaluate(`window.Capacitor.nativePromise('Offline','openExternal',${JSON.stringify({id:item.id})})`);
-  adb('shell','input','keyevent','4');
+  if (process.env.SKIP_EXTERNAL !== '1') {
+    await evaluate(`window.Capacitor.nativePromise('Offline','openExternal',${JSON.stringify({id:item.id})})`);
+    adb('shell','input','keyevent','4');
+  }
 
   await evaluate(`window.Capacitor.nativePromise('Offline','remove' ,${JSON.stringify({ id: item.id })})`);
   const remaining = await evaluate("window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items)");

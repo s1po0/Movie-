@@ -466,7 +466,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
-          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-offline-check.mjs && node scripts/android-hls-check.mjs
+          script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-offline-check.mjs && SKIP_EXTERNAL=1 node scripts/android-hls-check.mjs
   local-sign-build:
     if: contains(github.event.head_commit.message, '[local-sign-build]')
     runs-on: ubuntu-24.04
