@@ -132,6 +132,13 @@ async function donghuaRequest(variables) {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
+function resetDonghuaResults() {
+  donghuaSeq++; donghuaMovies = []; donghuaPage = 0; donghuaMore = false; donghuaLoading = false;
+  document.querySelector('#donghua-cards').innerHTML = '';
+  const button = document.querySelector('#donghua-more');
+  button.classList.add('hidden'); button.disabled = true;
+  document.querySelector('#donghua-status').textContent = 'بارکردنی لیستی دونگھوا...';
+}
 async function loadDonghua(page) {
   if (donghuaLoading && page !== 1) return;
   const seq = ++donghuaSeq; donghuaLoading = true;
@@ -871,11 +878,11 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('input', e => {
   if (e.target.id !== 'donghua-search') return;
-  donghuaSearch = e.target.value; clearTimeout(donghuaTimer); donghuaSeq++; donghuaPage = 0; donghuaLoading = false;
+  donghuaSearch = e.target.value; clearTimeout(donghuaTimer); resetDonghuaResults();
   donghuaTimer = setTimeout(() => loadDonghua(1), 400);
 });
 app.addEventListener('change', async e => {
-  if (e.target.id === 'donghua-kind') { donghuaKind = e.target.value; clearTimeout(donghuaTimer); donghuaPage = 0; donghuaLoading = false; loadDonghua(1); }
+  if (e.target.id === 'donghua-kind') { donghuaKind = e.target.value; clearTimeout(donghuaTimer); resetDonghuaResults(); loadDonghua(1); }
   if (e.target.id === 'embedded-language') embeddedSubtitles?.setTarget(e.target.value);
   if (e.target.id === 'embedded-subtitle-file') {
     const file = e.target.files[0], session = playerSession, requestId = ++embeddedSourceRequest;
