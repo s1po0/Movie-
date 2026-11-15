@@ -11,7 +11,7 @@ export const DONGHUA_QUERY = `query ($page: Int!, $search: String, $format: [Med
 }`;
 const formats = { all: ['TV','TV_SHORT','ONA','OVA','MOVIE','SPECIAL'], series: ['TV','TV_SHORT','ONA','OVA'], movie: ['MOVIE'] };
 export function donghuaVariables(page, search = '', kind = 'all') {
-  if (!Number.isInteger(page) || page < 1 || page > 1000 || !Object.hasOwn(formats, kind)) throw new Error('Invalid catalog request');
+  if (!Number.isInteger(page) || page < 1 || page > 1000 || !Object.prototype.hasOwnProperty.call(formats, kind)) throw new Error('Invalid catalog request');
   const term = Array.from(String(search).trim()).slice(0, 100).join('');
   return { page, search: term || null, format: formats[kind] };
 }
