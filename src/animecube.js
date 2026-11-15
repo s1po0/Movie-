@@ -50,22 +50,24 @@ export async function dailymotionMedia(playerUrl, getJson) {
   const streamUrl = streams.filter(item => /^application\/(x-mpegurl|vnd\.apple\.mpegurl)$/i.test(item?.type || ''))
     .map(item => safeUrl(item.url, manifestHosts)).find(Boolean);
   if (!streamUrl) throw new Error('HLS stream unavailable');
-  // Prefer human English, then Arabic, then auto-generated English. They are
-  // translated from this exact video, so subtitle timing isn't borrowed from a different cut.
+  // Offer each available track for this exact video. The language tag does not
+  // certify that the source was human-written or that its translation is good.
   const tracks = metadata?.subtitles?.data || {};
-  let subtitleUrl = null, subtitleLanguage = null;
-  const otherLanguages = Object.keys(tracks).filter(lang => /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-auto)?$/.test(lang) && !['en', 'ar', 'en-auto'].includes(lang));
-  otherLanguages.sort((a, b) => Number(a.endsWith('-auto')) - Number(b.endsWith('-auto')));
-  for (const lang of ['en', 'ar', 'en-auto', ...otherLanguages]) {
-    const urls = tracks[lang]?.urls;
+  const languages = Object.keys(tracks).filter(lang => /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?(?:-auto)?$/.test(lang));
+  const priority = lang => ({ en: 0, ar: 1, 'en-auto': 2 }[lang] ?? (lang.endsWith('-auto') ? 4 : 3));
+  languages.sort((a, b) => priority(a) - priority(b) || a.localeCompare(b));
+  const subtitleTracks = languages.flatMap(language => {
+    const urls = tracks[language]?.urls;
     const url = Array.isArray(urls) && urls.map(value => safeUrl(value, new Set(['static1.dmcdn.net', 'static2.dmcdn.net']))).find(Boolean);
-    if (url) { subtitleUrl = url; subtitleLanguage = lang; break; }
-  }
+    return url ? [{ language, url }] : [];
+  });
+  const subtitleUrl = subtitleTracks[0]?.url || null;
+  const subtitleLanguage = subtitleTracks[0]?.language || null;
   // These are the qualities advertised for this video, not a guarantee that
   // the CDN or the device will be able to play/download each variant.
   const qualityLevels = Object.keys(metadata?.stream_formats || {}).map(Number)
     .filter(value => [380, 480, 720, 1080, 1440, 2160].includes(value)).sort((a,b) => a-b);
-  return { streamUrl, subtitleUrl, subtitleLanguage, qualityLevels };
+  return { streamUrl, subtitleUrl, subtitleLanguage, subtitleTracks, qualityLevels };
 }
 
 // Read actual HLS variants instead of treating metadata encoding labels as availability.

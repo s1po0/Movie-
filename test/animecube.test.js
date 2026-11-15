@@ -39,7 +39,7 @@ test('discovers non-protected HLS and English subtitles only from allowed hosts'
     assert.equal(url, 'https://www.dailymotion.com/player/metadata/video/kExample123');
     return meta;
   });
-  assert.deepEqual(result, {streamUrl:'https://cdndirector.dailymotion.com/cdn/manifest/video/123.m3u8?sec=abc',subtitleUrl:'https://static2.dmcdn.net/subtitle_en.srt',subtitleLanguage:'en',qualityLevels:[]});
+  assert.deepEqual(result, {streamUrl:'https://cdndirector.dailymotion.com/cdn/manifest/video/123.m3u8?sec=abc',subtitleUrl:'https://static2.dmcdn.net/subtitle_en.srt',subtitleLanguage:'en',subtitleTracks:[{language:'en',url:'https://static2.dmcdn.net/subtitle_en.srt'}],qualityLevels:[]});
   await assert.rejects(dailymotionMedia('https://evil.example/player/x1h6z6.html?video=kExample123', async () => meta), /Invalid player/);
   await assert.rejects(dailymotionMedia(player, async () => ({...meta, protected_delivery:true})), /Protected/);
   await assert.rejects(dailymotionMedia(player, async () => ({...meta, protected_delivery:undefined})), /Protected/);
@@ -69,4 +69,13 @@ test('falls back to other available subtitle languages on trusted hosts', async 
   const meta = {protected_delivery:false, qualities:{auto:[{type:'application/x-mpegURL',url:'https://cdndirector.dailymotion.com/x.m3u8'}]}, subtitles:{data:{'zh-auto':{urls:['https://static2.dmcdn.net/z.srt']}, fr:{urls:['https://static2.dmcdn.net/fr.srt']}, evil:{urls:['https://evil.example/x.srt']}}}};
   const result = await dailymotionMedia(player, async () => meta);
   assert.equal(result.subtitleLanguage, 'fr');
+});
+
+
+test('offers safe independent language tracks and identifies automated captions', async () => {
+  const meta = {protected_delivery:false, qualities:{auto:[{type:'application/x-mpegURL',url:'https://cdndirector.dailymotion.com/x.m3u8'}]}, subtitles:{data:{'en-auto':{urls:['https://static2.dmcdn.net/auto.srt']},id:{urls:['https://static1.dmcdn.net/id.srt']},ar:{urls:['https://static2.dmcdn.net/ar.srt']}, bad:{urls:['https://evil.example/x']},'x<script>':{urls:['https://static1.dmcdn.net/x']}}}};
+  const result = await dailymotionMedia('https://geo.dailymotion.com/player/x19jsm.html?video=kExample123', async () => meta);
+  assert.deepEqual(result.subtitleTracks.map(track => track.language), ['ar','en-auto','id']);
+  assert.equal(result.subtitleUrl, result.subtitleTracks[0].url);
+  assert.equal(result.subtitleLanguage, 'ar');
 });
