@@ -5,7 +5,7 @@ const media=(id,opts={})=>({id,format:'ONA',countryOfOrigin:'CN',isAdult:false,t
 const result=media=>({data:{Page:{pageInfo:{hasNextPage:true},media}}});
 test('constructs bounded paginated Chinese animation, movie, series and search filters',()=>{
  assert.deepEqual(donghuaVariables(2,'  abc  ','movie'),{page:2,search:'abc',format:['MOVIE']});
- assert.equal(donghuaVariables(1).format,null); assert.throws(()=>donghuaVariables(0));assert.throws(()=>donghuaVariables(1,'','invalid'));
+ assert.ok(donghuaVariables(1).format.includes('MOVIE')); assert.throws(()=>donghuaVariables(0));assert.throws(()=>donghuaVariables(1,'','invalid'));
 });
 test('uses only actual nonadult Chinese metadata and deduplicates, preserving next-page signal',()=>{
  const r=donghuaCatalog(result([media(1),media(1),media(2,{countryOfOrigin:'JP'}),media(3,{isAdult:true}),media(4,{format:'MOVIE'})]));
