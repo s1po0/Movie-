@@ -20,6 +20,7 @@ import { findUpdate, releaseApi } from './update.js';
 import { isOfflineDownloadable, offlineSubtitle, offlineProgress } from './offline.js';
 import { dailymotionMedia, manifestQualityLevels } from './animecube.js';
 import { donghuaEpisodeSource, donghuaEpisodeUrl } from './donghuastream.js';
+import { donghuaAnimeUrl } from './donghua-player.js';
 import { DONGHUA_API, ANIME_MAPPING, DONGHUA_QUERY, donghuaVariables, donghuaCatalog, resolveDonghuaMapping } from './donghua-catalog.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
@@ -160,18 +161,27 @@ async function loadDonghua(page) {
     button.classList.remove('hidden');
   } finally { if (seq === donghuaSeq) { donghuaLoading = false; button.disabled = false; } }
 }
-async function openDonghuaCatalog(item) {
-  const marker = `donghua-${item.anilistId}-${Date.now()}`;
-  openModal(`<div class="dialog-header"><h2 dir="auto">${escapeHtml(item.title)}</h2><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p id="donghua-resolve" data-request="${marker}" role="status">گەڕان بۆ ناسنامەی پەخش و ژێرنووس...</p>`);
-  const active = () => !document.querySelector('#modal').classList.contains('hidden') && document.querySelector('#donghua-resolve')?.dataset.request === marker;
-  try {
-    if (!donghuaMapPromise) donghuaMapPromise = subtitleHttp(ANIME_MAPPING, 'json').catch(error => { donghuaMapPromise = null; throw error; });
-    const entries = await donghuaMapPromise;
-    if (!active()) return;
-    const resolved = resolveDonghuaMapping(item, entries);
-    if (!resolved) { document.querySelector('#donghua-resolve').textContent = 'ناسنامەی دڵنیای پەخش بۆ ئەم ناونیشانە نەدۆزرایەوە؛ ژێرنووس و پەخش ناتوانرێت پشتڕاست بکرێت.'; return; }
-    closeModal(); openPlayer(resolved);
-  } catch { if (active()) document.querySelector('#donghua-resolve').textContent = 'پەیوەندی بە سەرچاوەی ناسنامەکان سەرکەوتوو نەبوو؛ دووبارە هەوڵ بدە.'; }
+function openDonghuaCatalog(item) {
+  openDonghuaAnime({ ...item, episode: 1 });
+}
+function openDonghuaAnime(item) {
+  playerSession++; subtitleRequest++; current = { ...item, animePlayer: true, mediaKind: item.format === 'MOVIE' ? 'movie' : 'series' };
+  const session = playerSession, modal = document.querySelector('#player-modal');
+  const url = donghuaAnimeUrl(item.anilistId, item.episode || 1);
+  const episodeMax = Number.isInteger(item.episodes) ? Math.min(item.episodes, 9999) : 9999;
+  modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">DONGHUA</span><h2 dir="auto">${escapeHtml(item.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(item.title)}" sandbox="allow-scripts allow-same-origin allow-presentation" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>${item.format !== 'MOVIE' ? `<section class="episode-controls" dir="rtl" aria-labelledby="donghua-episode-title"><div class="episode-picker-head"><div><span class="episode-kicker">دۆنگھوا</span><h3 id="donghua-episode-title">ئەڵقە هەڵبژێرە</h3><p>بۆ وەرز یان بەشی تر، لە لیستی دونگھوا بگەڕێ.</p></div><div class="episode-now"><span>ئێستا</span><strong>ئەڵقەی <bdi>${item.episode || 1}</bdi></strong></div></div><div class="episode-picker-row donghua-episode-row"><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="${episodeMax}" value="${item.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="donghua-anime-play">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported"><p>ژێرنووسی بەردەست لە لیستی CCی پلەیەرەکە هەڵبژێرە. وەرگێڕانی سۆرانی لەم سەرچاوەیەدا پشتگیری ناکرێت.</p><p>ئەگەر ئەم سەرچاوەیە کار نەکرد، سەرچاوەی تر تاقی بکەرەوە. هەموو ناونیشان و ئەڵقەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><button id="donghua-vidlink" class="ghost hidden" type="button" data-action="donghua-vidlink">سەرچاوەی تر · سۆرانی</button></div><p id="donghua-alternate-status" class="player-hint" role="status">گەڕان بۆ سەرچاوەی تر...</p></div>`;
+  modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
+  const frame = modal.querySelector('iframe'); startEmbeddedPlayer(frame, session);
+  frame.addEventListener('load', () => { if (session !== playerSession) return; modal.querySelector('#embedded-loading')?.classList.add('hidden'); modal.querySelector('#embedded-status').textContent = 'دوگمەی پەخش لە ناو پلەیەرەکە دابگرە.'; });
+  if (item.format !== 'MOVIE') setupEpisodeControls(modal.querySelector('.episode-controls'));
+  if (!donghuaMapPromise) donghuaMapPromise = subtitleHttp(ANIME_MAPPING, 'json').catch(error => { donghuaMapPromise = null; throw error; });
+  donghuaMapPromise.then(entries => {
+    if (session !== playerSession || !current?.animePlayer) return;
+    current.animeMapping = resolveDonghuaMapping(item, entries);
+    const status = modal.querySelector('#donghua-alternate-status');
+    if (current.animeMapping) { modal.querySelector('#donghua-vidlink').classList.remove('hidden'); status.textContent = 'سەرچاوەی تر دەتوانێت وەرگێڕانی سۆرانی پێشکەش بکات، ئەگەر ژێرنووس بدۆزرێتەوە.'; }
+    else status.textContent = 'سەرچاوەی تری دڵنیا بۆ ئەم ناونیشانە نەدۆزرایەوە.';
+  }).catch(() => { if (session === playerSession) modal.querySelector('#donghua-alternate-status').textContent = 'سەرچاوەی تر بار نەبوو؛ دواتر دووبارە هەوڵ بدە.'; });
 }
 function catalogCards(items) {
   return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy" decoding="async"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
@@ -645,7 +655,7 @@ function setupEpisodeControls(container) {
     const number = Number(episode.value);
     const isSelect = episode.tagName === 'SELECT';
     container.querySelector('[data-episode-step="-1"]').disabled = isSelect ? episode.selectedIndex <= 0 : !Number.isInteger(number) || number <= 1;
-    container.querySelector('[data-episode-step="1"]').disabled = isSelect ? episode.selectedIndex < 0 || episode.selectedIndex >= episode.options.length - 1 : !Number.isInteger(number) || number >= 9999;
+    container.querySelector('[data-episode-step="1"]').disabled = isSelect ? episode.selectedIndex < 0 || episode.selectedIndex >= episode.options.length - 1 : !Number.isInteger(number) || number >= Number(episode.max || 9999);
   };
   container.addEventListener('input', event => {
     if (event.target.matches('#episode-season, #episode-number')) { container.dataset.edited = 'true'; refresh(); }
@@ -658,7 +668,7 @@ function setupEpisodeControls(container) {
     if (!button) return;
     const episode = getEpisode(), step = Number(button.dataset.episodeStep);
     if (episode.tagName === 'SELECT') episode.selectedIndex += step;
-    else episode.value = String(Math.min(9999, Math.max(1, Number(episode.value) + step)));
+    else episode.value = String(Math.min(Number(episode.max || 9999), Math.max(1, Number(episode.value) + step)));
     episode.dispatchEvent(new Event('change', { bubbles: true }));
   });
   refresh();
@@ -698,7 +708,7 @@ function openPlayer(movie) {
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
     const url = embeddedUrl(movie);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div>${movie.mediaKind === 'series' ? `<section class="episode-controls" dir="rtl" aria-labelledby="episode-picker-title"><div class="episode-picker-head"><div><span class="episode-kicker">زنجیرە</span><h3 id="episode-picker-title">وەرز و ئەڵقە هەڵبژێرە</h3><p>هەڵبژاردەکەت بگۆڕە، پاشان سەیرکردن دابگرە.</p></div><div class="episode-now"><span>ئێستا لە پەخشدایە</span><strong>وەرزی <bdi>${movie.season || 1}</bdi> · ئەڵقەی <bdi>${movie.episode || 1}</bdi></strong></div></div><div class="episode-picker-row"><div class="episode-field"><label for="episode-season">وەرز</label><div class="episode-input"><input id="episode-season" type="number" inputmode="numeric" min="1" max="999" value="${movie.season || 1}"></div></div><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="9999" value="${movie.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="play-episode">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported">${icon('wifi-off')} دابەزاندنی ئەم پلەیەرەی دەرەکی پشتگیری ناکرێت. ${movie.id === 'series-tomb-of-fallen-gods' ? '<button class="ghost" type="button" data-action="donghua-source">سەرچاوەی DonghuaStream · وەرزی ٣</button>' : ''} <button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><p>1DM ئەپێکی جیاوازە؛ لە ناویدا ڤیدیۆ و شوێنی پاشەکەوت هەڵبژێرە. ژێرنووسی سۆرانی و دابەزینی هەموو سەرچاوەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی هەر زمانێک<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTT بە هەر زمانێک بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div>${movie.mediaKind === 'series' ? `<section class="episode-controls" dir="rtl" aria-labelledby="episode-picker-title"><div class="episode-picker-head"><div><span class="episode-kicker">زنجیرە</span><h3 id="episode-picker-title">وەرز و ئەڵقە هەڵبژێرە</h3><p>هەڵبژاردەکەت بگۆڕە، پاشان سەیرکردن دابگرە.</p></div><div class="episode-now"><span>ئێستا لە پەخشدایە</span><strong>وەرزی <bdi>${movie.season || 1}</bdi> · ئەڵقەی <bdi>${movie.episode || 1}</bdi></strong></div></div><div class="episode-picker-row"><div class="episode-field"><label for="episode-season">وەرز</label><div class="episode-input"><input id="episode-season" type="number" inputmode="numeric" min="1" max="999" value="${movie.season || 1}"></div></div><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="9999" value="${movie.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="play-episode">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported">${icon('wifi-off')} دابەزاندنی ئەم پلەیەرەی دەرەکی پشتگیری ناکرێت. ${movie.id === 'series-tomb-of-fallen-gods' ? '<button class="ghost" type="button" data-action="donghua-source">سەرچاوەی DonghuaStream · وەرزی ٣</button>' : ''} <button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><p>1DM ئەپێکی جیاوازە؛ لە ناویدا ڤیدیۆ و شوێنی پاشەکەوت هەڵبژێرە. ژێرنووسی سۆرانی و دابەزینی هەموو سەرچاوەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button>${movie.animeOriginal ? `<button class="ghost" type="button" data-action="donghua-anime-back">گەڕانەوە بۆ سەرچاوەی دونگھوا</button>` : ''}</div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی هەر زمانێک<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTT بە هەر زمانێک بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
@@ -804,6 +814,20 @@ app.addEventListener('click', e => {
   if (timing && embeddedSubtitles) { embeddedOffset = Math.max(-120, Math.min(120, embeddedOffset + Number(timing.dataset.subtitleOffset))); embeddedSubtitles.setOffset(embeddedOffset); document.querySelector('#subtitle-offset').textContent = `${embeddedOffset > 0 ? '+' : ''}${embeddedOffset}s`; }
   const asianMore = e.target.closest('[data-asian-more]');
   if (asianMore) loadAsian(asianMore.dataset.asianMore);
+  if (action === 'donghua-anime-play' && current?.animePlayer) {
+    const episode = Number(document.querySelector('#episode-number')?.value), max = Math.min(current.episodes || 9999, 9999);
+    if (!Number.isInteger(episode) || episode < 1 || episode > max) toast('ئەڵقەیەکی دروست هەڵبژێرە.');
+    else { const item = { ...current, episode }; closePlayer(); openDonghuaAnime(item); }
+  }
+  if (action === 'donghua-vidlink' && current?.animePlayer && current.animeMapping) {
+    const episode = current.episode || 1, original = { ...current, episode };
+    const mapped = { ...current.animeMapping, episode, animeOriginal: original };
+    closePlayer(); openPlayer(mapped);
+  }
+  if (action === 'donghua-anime-back' && current?.animeOriginal) {
+    const original = { ...current.animeOriginal, episode: current.episode || 1 };
+    closePlayer(); openDonghuaAnime(original);
+  }
   if (action === 'play-episode' && current?.mediaKind === 'series') {
     const season = Number(document.querySelector('#episode-season').value), episode = Number(document.querySelector('#episode-number').value);
     if (!Number.isInteger(season) || season < 1 || season > 999 || !Number.isInteger(episode) || episode < 1 || episode > 9999) toast('وەرز و ئەڵقەیەکی دروست هەڵبژێرە.');
@@ -837,8 +861,9 @@ app.addEventListener('click', e => {
   if (action === 'one-dm' && current) {
     try {
       if (!nativeOfflineAvailable()) throw new Error('Android only');
-      let url, page = Boolean(current.tmdbId || current.imdbId);
-      if (page) {
+      let url, page = Boolean(current.animePlayer || current.tmdbId || current.imdbId);
+      if (current.animePlayer) { url = donghuaAnimeUrl(current.anilistId, Number(document.querySelector('#episode-number')?.value || current.episode || 1)); }
+      else if (page) {
         const season = Number(document.querySelector('#episode-season')?.value || current.season || 1);
         const episode = Number(document.querySelector('#episode-number')?.value || current.episode || 1);
         url = current.id === 'series-tomb-of-fallen-gods' && season === 3

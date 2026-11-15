@@ -108,3 +108,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .episode-stepper button{flex:0 0 44px;height:48px;border:0;background:#ffffff0b;color:#e2dcff;font-size:20px;line-height:1}.episode-stepper button:hover:not(:disabled){background:#ffffff1c}.episode-stepper button:disabled{opacity:.35;cursor:not-allowed}
 .episode-play{min-height:50px;padding:10px 20px;border-radius:10px;white-space:nowrap}.episode-play svg{fill:currentColor;stroke:none}
 @media(max-width:560px){.episode-controls{padding:16px}.episode-picker-head{align-items:flex-start;flex-wrap:wrap;gap:10px}.episode-now{display:flex;align-items:center;gap:9px}.episode-picker-row{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px}.episode-play{grid-column:1/-1;width:100%}.episode-stepper button{flex-basis:40px}}
+.donghua-episode-row{grid-template-columns:minmax(0,1fr) auto}
+@media(max-width:560px){.donghua-episode-row{grid-template-columns:minmax(0,1fr)}}
