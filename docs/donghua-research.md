@@ -25,6 +25,10 @@ by this matrix. CI diagnostic: `43773712572`.
 | 185121 | Renegade Immortal: Battle of Gods | Episode not found |
 | 217627 | Renegade Immortal: Slaying the Blood Progenitor | Advancing, 1152×480 |
 
+The user reports that the direct links are absent, not a problem caused by Iraq.
+These runner tests cannot diagnose their local network or support blaming Iraq.
+The actionable issue is incomplete/missing working source resolution in the app.
+
 This directly contradicts any suggestion that the earlier Link Click/Legend of
 Hei Android test established broad Donghua coverage. The player provider fails
 some very popular series even when metadata exists. Provider-origin subtitle
@@ -63,6 +67,9 @@ CI `43766489662` covered Link Click and Legend of Hei only, not this 3D matrix.
   necessarily separately accessible subtitle tracks. Geo restrictions, deleted
   videos, rights, ads, third-party scripts and unreliable servers remain risks.
   A visible episode link or a metadata response is not evidence of playback.
+* AnimeCube advertised a Swallowed Star page, but its source-versions API returned
+  HTTP 403 to the CI probe `43774554721`; the app cannot obtain and validate
+  direct links from it in this test.
 * DonghuaFilm's old domain led to a new site requiring sign-in. Dongsub returned
   429; a tested ZerDonghua deployment returned 402. Deltax's tested domain did
   not connect. These are observations for the runner, not global conclusions.
@@ -74,8 +81,8 @@ mapping, rather than guessing by display title or concatenating absolute and
 season episode numbers. Validate selected series, season/part and exact episode
 against independent metadata and representative video content. Then test actual
 media advancement in the installed Android app, not merely iframe loads or
-metadata; test multiple early/middle/late episodes, a fresh network in the
-user's geography, and failure handling. Independently confirm available text
+metadata; test multiple early/middle/late episodes, failure handling, and (if available) a test on the user's actual network.
+Do not assume a geographic restriction without evidence. Independently confirm available text
 tracks and synchronized Sorani overlay on the exact video, real 720p variants,
 and 1DM/offline export where supported. Hardcoded subtitles cannot be extracted
 as text with the existing translation path. Source licensing/permissions and
