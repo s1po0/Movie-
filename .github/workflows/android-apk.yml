@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') && !contains(github.event.head_commit.message, '[sorani-live-check]') && !contains(github.event.head_commit.message, '[final-v25-check]') && !contains(github.event.head_commit.message, '[final-v26-check]') && !contains(github.event.head_commit.message, '[root-permission-check]') && !contains(github.event.head_commit.message, '[one-dm-check]') && !contains(github.event.head_commit.message, '[s3-caption-probe]') && !contains(github.event.head_commit.message, '[s3-choice-check]') && !contains(github.event.head_commit.message, '[final-v27-check]') && !contains(github.event.head_commit.message, '[final-v28-check]') && !contains(github.event.head_commit.message, '[donghua-catalog-probe]') && !contains(github.event.head_commit.message, '[donghua-catalog-check]') && !contains(github.event.head_commit.message, '[android-donghua-catalog-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') && !contains(github.event.head_commit.message, '[sorani-live-check]') && !contains(github.event.head_commit.message, '[final-v25-check]') && !contains(github.event.head_commit.message, '[final-v26-check]') && !contains(github.event.head_commit.message, '[root-permission-check]') && !contains(github.event.head_commit.message, '[one-dm-check]') && !contains(github.event.head_commit.message, '[s3-caption-probe]') && !contains(github.event.head_commit.message, '[s3-choice-check]') && !contains(github.event.head_commit.message, '[final-v27-check]') && !contains(github.event.head_commit.message, '[final-v28-check]') && !contains(github.event.head_commit.message, '[final-v29-check]') && !contains(github.event.head_commit.message, '[donghua-catalog-probe]') && !contains(github.event.head_commit.message, '[donghua-catalog-check]') && !contains(github.event.head_commit.message, '[android-donghua-catalog-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -872,6 +872,43 @@ jobs:
             adb shell am start -W -n app.dimo.movies/.MainActivity
             adb shell pidof app.dimo.movies
             echo '::notice title=Real v27 to v28 upgrade::Exact signed APK upgraded in place and preserved private app data.'
+
+  final-v29-check:
+    if: contains(github.event.head_commit.message, '[final-v29-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve exact signed APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/f1ac83171722e158b6f5c875b28fba66fe2a2877 > /tmp/old.apk
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/aab3006fba0229afdc61df05e350a0c2fa814c57 > /tmp/new.apk
+          echo 'bc33cecfd6f068992a4e7ef68308c0141836746b8600071ba9bbde1c9cba471c  /tmp/old.apk' | sha256sum -c -
+          echo 'a301b290629f16c054d8036fd60eb75f2aadf3b34e7675872b34924423e9b1ca  /tmp/new.apk' | sha256sum -c -
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: |
+            adb root
+            adb wait-for-device
+            adb install /tmp/old.apk
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
+            adb install -r /tmp/new.apk
+            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
+            adb shell dumpsys package app.dimo.movies | grep 'versionCode=29'
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
+            echo '::notice title=Real v28 to v29 upgrade::Exact signed APK upgraded in place and preserved private app data.'
 
   donghua-catalog-probe:
     if: contains(github.event.head_commit.message, '[donghua-catalog-probe]')
