@@ -1,9 +1,5 @@
-import {parseHTML} from 'linkedom';
-const get=async url=>{const r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0'},signal:AbortSignal.timeout(25000)}); if(!r.ok)throw Error('HTTP '+r.status);return r.text()};
-for(const [key,url] of [['donghua','https://donghuastream.org/anime/list-mode/'],['anime','https://animexin.dev/anime/list-mode/'],['show','https://donghuastream.org/anime/tomb-of-fallen-gods-season-3/'],['anime-show','https://animexin.dev/tomb-of-fallen-gods-season-3/']])try{
- let html=await get(url),doc=parseHTML(html).document;
- for(const selector of ['.listupd','.listseries','.listseries ul','ul.cl','div.eplister','div.eplister ul','div.bs','div.listupd a','div.eplister a']) {
-  const nodes=doc.querySelectorAll(selector);if(nodes.length) console.log(`::notice title=${key} ${selector}::count=${nodes.length}; example=${nodes[0].outerHTML.slice(0,450).replace(/\s+/g,' ')}`);
- }
- console.log(`::notice title=${key} totals::html=${html.length} title=${doc.title} all-links=${doc.querySelectorAll('a').length}`);
-}catch(e){console.log(`::notice title=${key}::${e.message}`)}
+const run=async(name,url,options={})=>{try{const r=await fetch(url,{...options,signal:AbortSignal.timeout(20000),headers:{'User-Agent':'Mozilla/5.0',...(options.headers||{})}});const text=await r.text();console.log(`::notice title=${name}::HTTP ${r.status} ${text.slice(0,800).replace(/\s+/g,' ')}`)}catch(e){console.log(`::notice title=${name}::${e.message}`)}};
+await run('anilist','https://graphql.anilist.co',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:'{ Page(page:1,perPage:2) { pageInfo {total hasNextPage} media(type:ANIME,countryOfOrigin:CN,sort:POPULARITY_DESC) { id title {romaji english} episodes format countryOfOrigin } } }'})});
+await run('kitsu','https://kitsu.io/api/edge/anime?filter%5Btext%5D=tomb%20of%20fallen%20gods&page%5Blimit%5D=1');
+await run('donghua','https://donghuastream.org/anime/list-mode/');
+await run('anime','https://animexin.dev/anime/list-mode/');
