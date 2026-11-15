@@ -1240,4 +1240,41 @@ jobs:
           node-version: 22
       - run: npm ci && node scripts/donghua-direct-coverage.mjs
 
+
   final-v31-check:
+    if: contains(github.event.head_commit.message, '[final-v31-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve exact signed APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/f0d565a4ac587fa816d8d135540e0cabdfd2e8c7 > /tmp/old.apk
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/398a7f491ca195d33b0e062aaa7772ea0eb9b89b > /tmp/new.apk
+          echo '1b0f597d246bb11ced1b16e040dbfd7c6904a68cfeb8ee1e8276d7cedb422501  /tmp/old.apk' | sha256sum -c -
+          echo 'b9784e152cf7de28c23c62e8ed937ea4101463b48d1894bee82b835a32abeb5b  /tmp/new.apk' | sha256sum -c -
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: |
+            adb root
+            adb wait-for-device
+            adb install /tmp/old.apk
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
+            adb install -r /tmp/new.apk
+            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
+            adb shell dumpsys package app.dimo.movies | grep 'versionCode=31'
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
+            echo '::notice title=Real v30 to v31 upgrade::Exact signed APK upgraded in place and preserved private app data.'
+
