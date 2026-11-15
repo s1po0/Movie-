@@ -20,6 +20,7 @@ import { findUpdate, releaseApi } from './update.js';
 import { isOfflineDownloadable, offlineSubtitle, offlineProgress } from './offline.js';
 import { dailymotionMedia, manifestQualityLevels } from './animecube.js';
 import { donghuaEpisodeSource, donghuaEpisodeUrl } from './donghuastream.js';
+import { DONGHUA_API, ANIME_MAPPING, DONGHUA_QUERY, donghuaVariables, donghuaCatalog, resolveDonghuaMapping } from './donghua-catalog.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
 const DonkeyPlayer = registerPlugin('DonkeyPlayer');
@@ -43,6 +44,7 @@ let embeddedMenuSource = null, embeddedMenuToken = null, embeddedTime = 0;
 const genres = [['all','هەمووی'], ['Action','ئەکشن'], ['Adventure','سەرکێشی'], ['Comedy','کۆمیدی'], ['Drama','دراما'], ['Horror','ترسناک'], ['Thriller','هیجان'], ['Crime','تاوان'], ['Mystery','نهێنی'], ['Romance','ڕۆمانسی'], ['Sci-Fi','زانستی خەیاڵی'], ['Fantasy','خەیاڵی'], ['Animation','ئەنیمەیشن'], ['Biography','ژیاننامە'], ['Sport','وەرزشی'], ['Family','خێزانی'], ['Documentary','دۆکیومێنتاری'], ['History','مێژوویی'], ['War','جەنگ'], ['Western','وێستەرن']];
 const shelves = [{id:'popular', genre:'', title:'بەناوبانگەکان', subtitle:'فیلمەکانی سەر زارەکان'}, {id:'action', genre:'Action', title:'ئەکشن و سەرکێشی', subtitle:'بۆ دەمێکی پڕ لە هیجان'}, {id:'horror', genre:'Horror', title:'جیهانی ترس', subtitle:'بۆ ئەوانەی دڵێکی بوێریان هەیە'}];
 let shelfMovies = [], asianMovies = [], asianObserver;
+let donghuaMovies = [], donghuaPage = 0, donghuaMore = false, donghuaLoading = false, donghuaSeq = 0, donghuaKind = 'all', donghuaSearch = '', donghuaTimer, donghuaMapPromise;
 let asianState = {};
 const asianShelves = [{id:'koreanMovie', title:'سینەمای کۆری', subtitle:'فیلم لە کۆریا'}, {id:'korean', title:'درامای کۆری', subtitle:'زنجیرە کۆرییەکان'}, {id:'japanese', title:'سینەمای ژاپۆنی', subtitle:'فیلم لە ژاپۆن'}, {id:'chinese', title:'سینەمای چینی', subtitle:'فیلم لە چین، هۆنگ کۆنگ و تایوان'}];
 let discovery = [], discoveryQuery = '', discoveryGenre = '', discoveryPage = 0, discoverySeq = 0, discoveryTimer, discoveryMore = false, discoveryLoading = false, discoveryAuto = true, discoveryObserver;
@@ -72,6 +74,12 @@ function render() {
         <section class="offline-banner" aria-label="دابەزێنراوەکان"><div class="offline-banner-icon">${icon('wifi-off')}</div><div><span class="overline">WATCH OFFLINE</span><h2>سینەما، هەر شوێنێک بیت.</h2><p>فیلمی ڕاستەوخۆ لەگەڵ ژێرنووسی کوردی پاشەکەوت بکە.</p></div><button class="offline-banner-button" data-action="offline">${icon('download')} دابەزێنراوەکان ${icon('chevron-left')}</button></section>
         <div class="shelf-intro"><div><span class="overline">CURATED FOR YOU</span><h2>ئەمڕۆ چی دەبینین؟ <span>✳</span></h2><p>چیرۆکێکی نوێ چاوەڕێتە.</p></div><a href="#catalog">هەموو فیلمەکان ${icon('arrow-up-left')}</a></div>
         <div class="shelf-list">${shelves.map(shelf => `<section class="shelf" aria-labelledby="shelf-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="shelf-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-genre="${shelf.genre || 'all'}">هەمووی ${icon('chevron-left')}</button></div><div class="shelf-rail" id="shelf-${shelf.id}"><div class="shelf-loading">فیلمەکان بار دەکرێن...</div></div></section>`).join('')}</div>
+        <section class="catalog-section" id="donghua" aria-label="Donghua">
+          <div class="shelf-intro"><div><span class="overline">DONGHUA · ANILIST</span><h2>دۆنگھوا <span>✳</span></h2><p>فیلم و زنجیرە ئەنیمەیشنی چینی</p></div></div>
+          <p class="catalog-notice">ئەم لیستە تەنها زانیاریی ناونیشانەکانە؛ پەخش، ژێرنووس و وەرگێڕان بۆ هەموویان دڵنیا نییە.</p>
+          <div class="donghua-controls"><label>گەڕانی دونگھوا <input id="donghua-search" type="search" dir="auto" maxlength="100" placeholder="ناوی دونگھوا..."></label><label>جۆر <select id="donghua-kind"><option value="all">هەموو جۆرەکان</option><option value="series">زنجیرە</option><option value="movie">فیلم</option></select></label></div>
+          <div id="donghua-cards" class="catalog-cards"></div><p id="donghua-status" class="form-hint" role="status"></p><button id="donghua-more" class="ghost hidden" type="button">دۆنگھوای زیاتر</button>
+        </section>
         <div class="asian-section" id="asian"><div class="shelf-intro asian-intro"><div><span class="overline">ASIAN CINEMA</span><h2>چیرۆکەکانی ئاسیا <span>✳</span></h2><p>دراما و فیلم، لە کۆریا تا ژاپۆن و چین.</p></div></div><p class="asian-notice">تەنها ئەو ناونیشانانە نیشان دەدرێن کە ژێرنووسی ئینگلیزییان لە سەرچاوەی ژێرنووس دۆزراوەتەوە؛ بەردەستبوونی پەخش و CC دەکرێت بگۆڕێت.</p>${asianShelves.map(shelf => `<section class="shelf" aria-labelledby="asian-title-${shelf.id}"><div class="shelf-heading"><div><h2 id="asian-title-${shelf.id}">${shelf.title}</h2><p>${shelf.subtitle}</p></div><button class="shelf-more" data-asian-more="${shelf.id}">زیاتر ${icon('chevron-left')}</button></div><div class="shelf-rail" id="asian-${shelf.id}"><div class="shelf-loading">گەڕان بۆ فیلم و ژێرنووس...</div></div><p class="asian-status" id="asian-status-${shelf.id}" role="status"></p></section>`).join('')}</div>
         <section class="catalog" id="catalog">
           <div class="section-head catalog-head"><div><span class="overline">EXPLORE MOVIES</span><h2>بگەڕێ و بدۆزەرەوە <span>✳</span></h2><p>بەپێی دڵت فیلمێک هەڵبژێرە.</p></div><label class="catalog-search"><span class="sr-only">گەڕان بە ناوی فیلم</span>${icon('search')}<input id="catalog-search" type="search" placeholder="ناوی فیلمێک بگەڕێ..." autocomplete="off"></label></div>
@@ -100,6 +108,8 @@ function render() {
     discoveryObserver.observe(document.querySelector('#more-movies'));
   }
   loadDiscovery('', 1);
+  donghuaMovies = []; donghuaPage = 0; donghuaMore = false; donghuaLoading = false; donghuaSearch = ''; donghuaKind = 'all';
+  loadDonghua(1);
   loadShelves();
   asianMovies = []; asianState = {};
   asianObserver?.disconnect();
@@ -110,6 +120,51 @@ function render() {
     asianObserver.observe(document.querySelector('#asian'));
   } else asianShelves.forEach(shelf => loadAsian(shelf.id));
   if (Capacitor.isNativePlatform()) checkForUpdate(false);
+}
+async function donghuaRequest(variables) {
+  const body = { query: DONGHUA_QUERY, variables };
+  if (Capacitor.isNativePlatform()) {
+    const r = await CapacitorHttp.post({url:DONGHUA_API, headers:{'Content-Type':'application/json'}, data:body, responseType:'json', connectTimeout:15000, readTimeout:20000});
+    if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}`);
+    return typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  }
+  const r = await fetch(DONGHUA_API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function loadDonghua(page) {
+  if (donghuaLoading && page !== 1) return;
+  const seq = ++donghuaSeq; donghuaLoading = true;
+  const status = document.querySelector('#donghua-status'), button = document.querySelector('#donghua-more');
+  status.textContent = 'بارکردنی لیستی دونگھوا...'; button.disabled = true;
+  try {
+    const data = donghuaCatalog(await donghuaRequest(donghuaVariables(page, donghuaSearch, donghuaKind)));
+    if (seq !== donghuaSeq) return;
+    const known = new Set((page === 1 ? [] : donghuaMovies).map(item => item.id));
+    const added = data.movies.filter(item => !known.has(item.id));
+    donghuaMovies = page === 1 ? added : [...donghuaMovies, ...added];
+    donghuaPage = page; donghuaMore = data.hasMore && added.length > 0;
+    document.querySelector('#donghua-cards').innerHTML = catalogCards(donghuaMovies);
+    status.textContent = `${donghuaMovies.length.toLocaleString()} ناونیشان بارکرا · پەخش و ژێرنووس پێشتر پشتڕاست نەکراون.`;
+    button.classList.toggle('hidden', !donghuaMore); paintIcons();
+  } catch {
+    if (seq !== donghuaSeq) return;
+    status.textContent = 'لیستی دونگھوا بار نەبوو؛ ئینتەرنێت بپشکنە و دووبارە هەوڵ بدە.';
+    button.classList.remove('hidden');
+  } finally { if (seq === donghuaSeq) { donghuaLoading = false; button.disabled = false; } }
+}
+async function openDonghuaCatalog(item) {
+  const marker = `donghua-${item.anilistId}-${Date.now()}`;
+  openModal(`<div class="dialog-header"><h2 dir="auto">${escapeHtml(item.title)}</h2><button class="icon-button" data-action="close" aria-label="داخستن">${icon('x')}</button></div><p id="donghua-resolve" data-request="${marker}" role="status">گەڕان بۆ ناسنامەی پەخش و ژێرنووس...</p>`);
+  const active = () => !document.querySelector('#modal').classList.contains('hidden') && document.querySelector('#donghua-resolve')?.dataset.request === marker;
+  try {
+    if (!donghuaMapPromise) donghuaMapPromise = subtitleHttp(ANIME_MAPPING, 'json').catch(error => { donghuaMapPromise = null; throw error; });
+    const entries = await donghuaMapPromise;
+    if (!active()) return;
+    const resolved = resolveDonghuaMapping(item, entries);
+    if (!resolved) { document.querySelector('#donghua-resolve').textContent = 'ناسنامەی دڵنیای پەخش بۆ ئەم ناونیشانە نەدۆزرایەوە؛ ژێرنووس و پەخش ناتوانرێت پشتڕاست بکرێت.'; return; }
+    closeModal(); openPlayer(resolved);
+  } catch { if (active()) document.querySelector('#donghua-resolve').textContent = 'پەیوەندی بە سەرچاوەی ناسنامەکان سەرکەوتوو نەبوو؛ دووبارە هەوڵ بدە.'; }
 }
 function catalogCards(items) {
   return items.map(movie => `<article class="catalog-card"><button class="catalog-movie" data-play="${escapeHtml(movie.id)}" aria-label="سەیرکردنی ${escapeHtml(movie.title)}"><div class="catalog-poster"><img src="${escapeHtml(movie.poster)}" alt="" loading="lazy" decoding="async"><span class="catalog-badge">${escapeHtml(movie.year || 'FREE')}</span><span class="catalog-open">${icon('play')}</span></div><h3 dir="auto">${escapeHtml(movie.title)}</h3><p dir="auto">${escapeHtml(movie.type || 'فیلم')} · STREAMING</p></button></article>`).join('');
@@ -348,7 +403,7 @@ async function openDonkey(url) {
     else window.open(url, '_blank', 'noopener,noreferrer');
   } catch { toast('ماڵپەڕەکە نەکرایەوە.'); }
 }
-function findMovie(id) { return [...library, ...movies, ...discovery, ...shelfMovies, ...asianMovies].find(m => m.id === id); }
+function findMovie(id) { return [...library, ...movies, ...discovery, ...shelfMovies, ...asianMovies, ...donghuaMovies].find(m => m.id === id); }
 async function getJson(url) {
   if (Capacitor.isNativePlatform()) {
     const response = await CapacitorHttp.get({ url, responseType: 'json' });
@@ -791,7 +846,8 @@ app.addEventListener('click', e => {
   const offlineDelete = e.target.closest('[data-offline-delete]');
   if (offlineDelete && confirm('ئەم دابەزاندنە بسڕدرێتەوە؟')) Offline.remove({ id: offlineDelete.dataset.offlineDelete }).then(offlineDialog).catch(() => toast('سڕینەوە سەرکەوتوو نەبوو.'));
   if (action === 'add') addDialog(); if (action === 'help') helpDialog(); if (action === 'close') closeModal(); if (action === 'close-player') closePlayer();
-  const play = e.target.closest('[data-play]'); if (play) { if (play.closest('#modal')) closeModal(); const movie = findMovie(play.dataset.play); if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
+  const play = e.target.closest('[data-play]'); if (play) { if (play.closest('#modal')) closeModal(); const movie = findMovie(play.dataset.play); if (movie?.anilistId) openDonghuaCatalog(movie); else if (movie && isDonkeyPage(movie.url)) openDonkey(movie.url); else openPlayer(movie); }
+  if (e.target.closest('#donghua-more')) loadDonghua(donghuaPage ? donghuaPage + 1 : 1);
   const del = e.target.closest('[data-delete]'); if (del && confirm('ئەم فیلمە لە کتێبخانە بسڕدرێتەوە؟')) { library = library.filter(m => m.id !== del.dataset.delete); saveLibrary(); libraryDialog(); toast('فیلمەکە سڕایەوە.'); }
   if (e.target.closest('#translate')) translateCues();
   if (e.target.closest('#more-movies')) loadDiscovery(discoveryQuery, discoveryPage + 1);
@@ -813,7 +869,13 @@ app.addEventListener('input', e => {
   document.querySelector('#discovery-status').textContent = 'گەڕان...';
   discoveryTimer = setTimeout(() => loadDiscovery(query, 1), 400);
 });
+app.addEventListener('input', e => {
+  if (e.target.id !== 'donghua-search') return;
+  donghuaSearch = e.target.value; clearTimeout(donghuaTimer); donghuaSeq++; donghuaPage = 0; donghuaLoading = false;
+  donghuaTimer = setTimeout(() => loadDonghua(1), 400);
+});
 app.addEventListener('change', async e => {
+  if (e.target.id === 'donghua-kind') { donghuaKind = e.target.value; clearTimeout(donghuaTimer); donghuaPage = 0; donghuaLoading = false; loadDonghua(1); }
   if (e.target.id === 'embedded-language') embeddedSubtitles?.setTarget(e.target.value);
   if (e.target.id === 'embedded-subtitle-file') {
     const file = e.target.files[0], session = playerSession, requestId = ++embeddedSourceRequest;
