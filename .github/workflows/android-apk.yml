@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   debug-apk:
-    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') && !contains(github.event.head_commit.message, '[sorani-live-check]') && !contains(github.event.head_commit.message, '[final-v25-check]') && !contains(github.event.head_commit.message, '[final-v26-check]') && !contains(github.event.head_commit.message, '[root-permission-check]') && !contains(github.event.head_commit.message, '[one-dm-check]') && !contains(github.event.head_commit.message, '[s3-caption-probe]') && !contains(github.event.head_commit.message, '[s3-choice-check]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[tomb-live-check]') && !contains(github.event.head_commit.message, '[tomb-network-check]') && !contains(github.event.head_commit.message, '[tomb-android-check]') && !contains(github.event.head_commit.message, '[offline-android-check]') && !contains(github.event.head_commit.message, '[animecube-android-check]') && !contains(github.event.head_commit.message, '[provider-download-probe]') && !contains(github.event.head_commit.message, '[donghuastream-probe]') && !contains(github.event.head_commit.message, '[donghua-android-check]') && !contains(github.event.head_commit.message, '[donghua-quality-check]') && !contains(github.event.head_commit.message, '[unsigned-local-signing-apk]') && !contains(github.event.head_commit.message, '[final-v24-check]') && !contains(github.event.head_commit.message, '[sorani-live-check]') && !contains(github.event.head_commit.message, '[final-v25-check]') && !contains(github.event.head_commit.message, '[final-v26-check]') && !contains(github.event.head_commit.message, '[root-permission-check]') && !contains(github.event.head_commit.message, '[one-dm-check]') && !contains(github.event.head_commit.message, '[s3-caption-probe]') && !contains(github.event.head_commit.message, '[s3-choice-check]') && !contains(github.event.head_commit.message, '[final-v27-check]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -798,3 +798,40 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           script: adb install android/app/build/outputs/apk/debug/app-debug.apk && adb shell appops set app.dimo.movies MANAGE_EXTERNAL_STORAGE allow && adb shell am start -n app.dimo.movies/.MainActivity && sleep 15 && pid=$(adb shell pidof app.dimo.movies | tr -d '\r') && adb forward tcp:9222 localabstract:webview_devtools_remote_$pid && node scripts/android-s3-subtitle-choice.mjs
+
+  final-v27-check:
+    if: contains(github.event.head_commit.message, '[final-v27-check]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve exact signed APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/473608380a0062c93017d58d96b6cdda9313154e > /tmp/old.apk
+          gh api -H 'Accept: application/vnd.github.raw+json' repos/s1po0/Movie-/git/blobs/76940dd71360a43d8d2d1a1da8c4849304e3f7a5 > /tmp/new.apk
+          echo '4dbf1cb25b93b1e1f7db4f0e809058ddd592cd9c1956483a293e0351280e014b  /tmp/old.apk' | sha256sum -c -
+          echo '7ec1f6f8d60ed895a05e146fa5c763a2e6eea309266472f34821a64c6b663cc3  /tmp/new.apk' | sha256sum -c -
+      - name: Enable hardware virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          script: |
+            adb root
+            adb wait-for-device
+            adb install /tmp/old.apk
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell 'mkdir -p /data/user/0/app.dimo.movies/files && echo preserved-data > /data/user/0/app.dimo.movies/files/upgrade-check'
+            adb install -r /tmp/new.apk
+            test "$(adb shell cat /data/user/0/app.dimo.movies/files/upgrade-check | tr -d '\r')" = preserved-data
+            adb shell dumpsys package app.dimo.movies | grep 'versionCode=27'
+            adb shell am start -W -n app.dimo.movies/.MainActivity
+            adb shell pidof app.dimo.movies
+            echo '::notice title=Real v26 to v27 upgrade::Exact signed APK upgraded in place and preserved private app data.'
