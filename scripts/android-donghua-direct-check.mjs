@@ -35,7 +35,11 @@ try{
    const item=await wait('direct offline download',async()=>{const {items}=await evaluate("window.Capacitor.nativePromise('Offline','list',{})");const row=items[0];if(row?.state==='failed')throw Error('Offline download failed');return row?.state==='ready'?row:null},600000);
    // Check this exact item's export rather than relying on queue completion.
    const final=await wait('root export',async()=>{const row=await evaluate(`window.Capacitor.nativePromise('Offline','list',{}).then(x=>x.items.find(r=>r.id==='${item.id}'))`);return row?.export==='done'?row:null},600000);
-   const base=`/sdcard/${final.exportName}`;const listing=adb('shell','ls','-l',`${base}.mp4`,`${base}.srt`);if(!listing.includes('.mp4')||!listing.includes('.srt'))throw Error('Export files missing');
+   const base=`/sdcard/${final.exportName}`;
+   // adb shell joins arguments; quote the paths containing spaces as one shell command.
+   if (base.includes("'")) throw Error('Unexpected quote in export name');
+   adb('shell',`test -s '${base}.mp4' && test -s '${base}.srt'`);
+   const exportedSrt=adb('shell',`cat '${base}.srt'`);if(!/[\u0600-\u06ff]/.test(exportedSrt)||(exportedSrt.match(/ --> /g)||[]).length!==3)throw Error('Exported test subtitle missing');
    console.log('::notice title=Direct offline export::A real direct episode and a separate translated test subtitle exported to the storage root.');
    await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify(item.id)})`);
   }
