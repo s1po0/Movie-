@@ -10,6 +10,10 @@ try {
  await evaluate("document.querySelector('#donghua-more').click()");await wait('page 2',()=>evaluate(`document.querySelectorAll('#donghua-cards .catalog-card').length > ${count}`));
  await evaluate("document.querySelector('#donghua-cards [data-play=donghua-126403]').click()");
  await wait('mapped Link Click player',()=>evaluate("Boolean(document.querySelector('#player-modal iframe[src*=\"/tv/123542/1/1\"]'))"));
+ await evaluate("document.querySelector('[data-episode-step=\"1\"]').click()");
+ if (await evaluate("document.querySelector('#episode-number').value") !== '2') throw Error('Android episode stepper failed');
+ await evaluate("document.querySelector('[data-action=play-episode]').click()");
+ await wait('episode 2 player',()=>evaluate("Boolean(document.querySelector('#player-modal iframe[src*=\"/tv/123542/1/2\"]'))"));
  const subtitle=await wait('subtitle attempt',()=>evaluate("document.querySelector('#embedded-subtitle-status')?.textContent || ''"));
- console.log(`::notice title=Android Donghua catalog::Live pages and Link Click mapped player opened. A player frame is not a playback or subtitle quality test; subtitle status ${subtitle.slice(0,80)}.`);
+ console.log(`::notice title=Android Donghua catalog::Live pages, Link Click mapped player and episode stepper verified. A player frame is not a playback or subtitle quality test; subtitle status ${subtitle.slice(0,80)}.`);
 }catch(e){console.log('::error title=Android Donghua catalog::'+e.message.split('\n')[0]);try{console.log('::notice title=Android catalog state::'+JSON.stringify(await evaluate("({status:document.querySelector('#donghua-status')?.textContent, count:document.querySelectorAll('#donghua-cards .catalog-card').length})")))}catch{};try {const opts={url:'https://graphql.anilist.co',headers:{'Content-Type':'application/json'},data:{query:DONGHUA_QUERY,variables:donghuaVariables(1)},responseType:'json',connectTimeout:15000,readTimeout:20000}; console.log('::notice title=Android catalog HTTP::'+JSON.stringify(await evaluate(`window.Capacitor.nativePromise('CapacitorHttp','post',${JSON.stringify(opts)}).then(x=>({status:x.status,errors:x.data?.errors,count:x.data?.data?.Page?.media?.length})).catch(e=>({error:String(e)}))`)))}catch{};process.exitCode=1}finally{socket?.close()}

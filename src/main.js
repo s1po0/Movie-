@@ -638,7 +638,33 @@ function startEmbeddedSubtitles(movie, session) {
   }
   loadEmbeddedSource(movie, session);
 }
-async function loadEpisodePicker(movie, session) {
+function setupEpisodeControls(container) {
+  const getEpisode = () => container.querySelector('#episode-number');
+  const refresh = () => {
+    const episode = getEpisode();
+    const number = Number(episode.value);
+    const isSelect = episode.tagName === 'SELECT';
+    container.querySelector('[data-episode-step="-1"]').disabled = isSelect ? episode.selectedIndex <= 0 : !Number.isInteger(number) || number <= 1;
+    container.querySelector('[data-episode-step="1"]').disabled = isSelect ? episode.selectedIndex < 0 || episode.selectedIndex >= episode.options.length - 1 : !Number.isInteger(number) || number >= 9999;
+  };
+  container.addEventListener('input', event => {
+    if (event.target.matches('#episode-season, #episode-number')) { container.dataset.edited = 'true'; refresh(); }
+  });
+  container.addEventListener('change', event => {
+    if (event.target.matches('#episode-season, #episode-number')) { container.dataset.edited = 'true'; refresh(); }
+  });
+  container.addEventListener('click', event => {
+    const button = event.target.closest('[data-episode-step]');
+    if (!button) return;
+    const episode = getEpisode(), step = Number(button.dataset.episodeStep);
+    if (episode.tagName === 'SELECT') episode.selectedIndex += step;
+    else episode.value = String(Math.min(9999, Math.max(1, Number(episode.value) + step)));
+    episode.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  refresh();
+  return refresh;
+}
+async function loadEpisodePicker(movie, session, refresh) {
   if (movie.id !== 'series-tomb-of-fallen-gods') return;
   try {
     let groups = episodeMetadata.get(movie.imdbId);
@@ -649,7 +675,7 @@ async function loadEpisodePicker(movie, session) {
     }
     if (session !== playerSession || !groups.length) return;
     const oldSeason = document.querySelector('#episode-season'), oldEpisode = document.querySelector('#episode-number');
-    if (!oldSeason || !oldEpisode) return;
+    if (!oldSeason || !oldEpisode || oldSeason.closest('.episode-controls')?.dataset.edited) return;
     const season = document.createElement('select'), episode = document.createElement('select');
     season.id = oldSeason.id; episode.id = oldEpisode.id;
     for (const group of groups) season.add(new Option(`وەرزی ${group.season}`, String(group.season)));
@@ -662,8 +688,8 @@ async function loadEpisodePicker(movie, session) {
       episode.value = String(entries.includes(selected) ? selected : entries[0]);
     };
     setEpisodes(movie.episode || 1);
-    season.addEventListener('change', () => setEpisodes(1));
-    oldSeason.replaceWith(season); oldEpisode.replaceWith(episode);
+    season.addEventListener('change', () => { setEpisodes(1); refresh(); });
+    oldSeason.replaceWith(season); oldEpisode.replaceWith(episode); refresh();
   } catch (error) { console.warn('Episode picker unavailable:', error?.message || 'network error'); /* Numeric controls remain usable. */ }
 }
 function openPlayer(movie) {
@@ -672,12 +698,12 @@ function openPlayer(movie) {
   const modal = document.querySelector('#player-modal');
   if (movie.tmdbId || movie.imdbId) {
     const url = embeddedUrl(movie);
-    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div>${movie.mediaKind === 'series' ? `<div class="episode-controls"><label>وەرز<input id="episode-season" type="number" min="1" max="999" value="${movie.season || 1}"></label><label>ئەڵقە<input id="episode-number" type="number" min="1" max="9999" value="${movie.episode || 1}"></label><button class="ghost" type="button" data-action="play-episode">سەیرکردن</button></div>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported">${icon('wifi-off')} دابەزاندنی ئەم پلەیەرەی دەرەکی پشتگیری ناکرێت. ${movie.id === 'series-tomb-of-fallen-gods' ? '<button class="ghost" type="button" data-action="donghua-source">سەرچاوەی DonghuaStream · وەرزی ٣</button>' : ''} <button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><p>1DM ئەپێکی جیاوازە؛ لە ناویدا ڤیدیۆ و شوێنی پاشەکەوت هەڵبژێرە. ژێرنووسی سۆرانی و دابەزینی هەموو سەرچاوەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی هەر زمانێک<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTT بە هەر زمانێک بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
+    modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">NOW PLAYING</span><h2 dir="auto">${escapeHtml(movie.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(movie.title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe><button type="button" class="embedded-fullscreen-button" data-action="subtitle-fullscreen">⛶ شاشەی پڕ · کوردی</button><button type="button" class="embedded-menu-ready hidden" data-action="enable-menu-subtitle">سۆرانی بۆ لیستی CC</button><div id="embedded-subtitle-text" class="embedded-subtitle-text" dir="auto" aria-live="off"></div><button type="button" class="dimo-fullscreen-exit" data-action="exit-subtitle-fullscreen" aria-label="دەرچوون لە شاشەی پڕ">✕</button></div>${movie.mediaKind === 'series' ? `<section class="episode-controls" dir="rtl" aria-labelledby="episode-picker-title"><div class="episode-picker-head"><div><span class="episode-kicker">زنجیرە</span><h3 id="episode-picker-title">وەرز و ئەڵقە هەڵبژێرە</h3><p>هەڵبژاردەکەت بگۆڕە، پاشان سەیرکردن دابگرە.</p></div><div class="episode-now"><span>ئێستا لە پەخشدایە</span><strong>وەرزی <bdi>${movie.season || 1}</bdi> · ئەڵقەی <bdi>${movie.episode || 1}</bdi></strong></div></div><div class="episode-picker-row"><div class="episode-field"><label for="episode-season">وەرز</label><div class="episode-input"><input id="episode-season" type="number" inputmode="numeric" min="1" max="999" value="${movie.season || 1}"></div></div><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="9999" value="${movie.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="play-episode">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported">${icon('wifi-off')} دابەزاندنی ئەم پلەیەرەی دەرەکی پشتگیری ناکرێت. ${movie.id === 'series-tomb-of-fallen-gods' ? '<button class="ghost" type="button" data-action="donghua-source">سەرچاوەی DonghuaStream · وەرزی ٣</button>' : ''} <button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><p>1DM ئەپێکی جیاوازە؛ لە ناویدا ڤیدیۆ و شوێنی پاشەکەوت هەڵبژێرە. ژێرنووسی سۆرانی و دابەزینی هەموو سەرچاوەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button></div><div class="subtitle-panel embedded-subtitle-panel"><div class="sub-heading"><div><span class="sub-icon">${icon('captions')}</span><div><h3>وەرگێڕانی Google بۆ کوردی سۆرانی</h3><p id="embedded-subtitle-status" role="status">گەڕان بۆ ژێرنووس...</p></div></div><label class="upload-button">${icon('upload')} ژێرنووسی هەر زمانێک<input id="embedded-subtitle-file" type="file" accept=".srt,.vtt,text/vtt,text/plain" hidden></label></div><div class="sub-controls"><label>زمانی ژێرنووس<select id="embedded-language"><option value="off">کوژاندنەوە</option>${languages.map(([code, name]) => `<option value="${code}" ${code === 'ckb' ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label></div><div class="player-actions"><button id="menu-subtitle-enable" class="primary hidden" type="button" data-action="enable-menu-subtitle">سۆرانی زیاد بکە بۆ لیستی CC</button><button class="ghost" type="button" data-action="retry-subtitles">دووبارە هەوڵدانەوەی وەرگێڕان</button><button class="ghost" type="button" data-action="subtitle-fullscreen">شاشەی پڕ بە ژێرنووس</button></div><div class="subtitle-timing"><span>ڕێکخستنی کاتی ژێرنووس</span><button type="button" data-subtitle-offset="-2" aria-label="دوو چرکە زووتر">− 2s</button><span id="subtitle-offset" dir="ltr">0s</span><button type="button" data-subtitle-offset="2" aria-label="دوو چرکە دواتر">+ 2s</button></div><p id="menu-subtitle-hint" class="player-hint hidden">دوای تەواوبوونی وەرگێڕان دوگمەی زیادکردنی سۆرانی دابگرە. پلەیەرەکە دووبارە دەکرێتەوە و کوردی سۆرانی لە هەمان لیستی CC دەردەکەوێت.</p><p class="player-hint">ژێرنووسی فیلم خۆکارانە دەدۆزرێتەوە و بە Google وەردەگێڕدرێت بۆ سۆرانی. ئەگەر نەدۆزرایەوە، دەتوانیت فایلی SRT یان VTT بە هەر زمانێک بار بکەیت؛ پێویست ناکات سۆرانی بێت. دەقی ژێرنووس بۆ Google دەنێردرێت و لەوانەیە کاتەکانی لەگەڵ وەشانی فیلمەکە جیاواز بن. ژێرنووسی ناو پلەیەر بکوژێنەوە بۆ ئەوەی دوو ژێرنووس نەردەکەوێت. بۆ شاشەی پڕ ئەم دوگمەیەی Kurd Movie بەکاربهێنە؛ شاشەی پڕی ناو پلەیەر ژێرنووسی Kurd Movie نیشان نادات.</p></div></div>`;
     modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
     const frame = modal.querySelector('iframe'), session = playerSession;
     startEmbeddedPlayer(frame, session);
     startEmbeddedSubtitles(movie, session);
-    if (movie.mediaKind === 'series') loadEpisodePicker(movie, session);
+    if (movie.mediaKind === 'series') { const refresh = setupEpisodeControls(modal.querySelector('.episode-controls')); loadEpisodePicker(movie, session, refresh); }
     frame.addEventListener('load', () => {
       if (session !== playerSession) return;
       document.querySelector('#embedded-loading')?.classList.add('hidden');

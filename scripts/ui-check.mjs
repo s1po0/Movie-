@@ -2,7 +2,7 @@ import { chromium } from 'playwright-core';
 
 const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 try {
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 375, height: 812 }, { width: 844, height: 390 }]) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 320, height: 720 }, { width: 390, height: 844 }, { width: 375, height: 812 }, { width: 844, height: 390 }]) {
     const page = await browser.newPage({ viewport });
     if (viewport.width === 375) await page.emulateMedia({ reducedMotion: 'reduce' });
     const errors = [];
@@ -35,7 +35,14 @@ try {
     await page.locator('.offline-unsupported').waitFor();
     if (await page.locator('#player-modal').getByText('کردنەوە لە پەڕەیەکی تر').count()) throw Error('Removed external player link is visible for series');
     await page.locator('#player-modal [data-action=retry-player]').waitFor();
+    await page.locator('.episode-controls h3').getByText('وەرز و ئەڵقە هەڵبژێرە').waitFor();
+    if (await page.locator('[data-episode-step="-1"]').isEnabled()) throw Error('Previous episode should be disabled at episode one');
+    await page.locator('[data-episode-step="1"]').click();
+    if (await page.locator('#episode-number').inputValue() !== '2') throw Error('Next episode stepper failed for manual input');
+    await page.locator('[data-episode-step="-1"]').click();
     await page.locator('#episode-number').fill('2');
+    const fit = await page.locator('.episode-controls').evaluate(el => ({scroll:el.scrollWidth, width:el.clientWidth}));
+    if (fit.scroll > fit.width) throw Error(`Episode controls overflow: ${JSON.stringify(fit)}`);
     await page.locator('[data-action=play-episode]').click();
     await page.locator('#player-modal iframe[src*="/tv/94796/1/2"]').waitFor();
     await page.locator('#player-modal [data-action=close-player]').click();
@@ -51,7 +58,10 @@ try {
     await page.locator('#player-modal iframe[src*="/tv/206343/1/1"]').waitFor();
     await page.locator('select#episode-season').waitFor();
     await page.locator('#episode-season').selectOption('2');
-    await page.locator('#episode-number').selectOption('2');
+    if (await page.locator('#episode-number').inputValue() !== '1') throw Error('Changing season did not reset the episode');
+    await page.locator('[data-episode-step="1"]').click();
+    if (await page.locator('#episode-number').inputValue() !== '2') throw Error('Next episode stepper failed for the episode list');
+    if (await page.locator('[data-episode-step="1"]').isEnabled()) throw Error('Next episode should be disabled at the end of the list');
     await page.locator('[data-action=one-dm]').waitFor();
     await page.locator('[data-action=play-episode]').click();
     await page.locator('#player-modal iframe[src*="/tv/206343/2/2"]').waitFor();
