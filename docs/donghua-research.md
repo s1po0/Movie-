@@ -74,7 +74,32 @@ CI `43766489662` covered Link Click and Legend of Hei only, not this 3D matrix.
   429; a tested ZerDonghua deployment returned 402. Deltax's tested domain did
   not connect. These are observations for the runner, not global conclusions.
 
-## Constraints for a real fix
+## Direct-source implementation (v31)
+
+An explicit LMAnime series/episode chooser now resolves the selected episode's
+English OK.ru mirror to a fresh progressive MP4 when one exists. It never
+assumes that an AniList part's local episode number matches the source's
+absolute numbering. CI `43775547210` used the Android app to search, choose and
+play Swallowed Star episode 100 and Renegade Immortal episode 1. Both advanced
+and decoded at 1920×1080. CI `43776142028` also verified a user-uploaded
+Spanish **test** subtitle translating into a Sorani track, and sent the direct
+URL to a simulated 1DM fixture, not the actual 1DM app. It downloaded/exported
+the direct episode and sample subtitle, although the last test command failed
+to quote paths containing spaces; a corrected test is running separately.
+
+Coverage probe `43775995109` fetched real MP4 bytes for three Renegade Immortal
+episodes, three Soul Land 2 episodes, one Battle Through the Heavens S5
+episode, Swallowed Star 249 and Throne of Seal 105. This is a byte-range test,
+not Android playback for those additional episodes. It also failed to resolve
+Swallowed Star episodes 1 and 125 and the sampled Soul Land 1 episodes through
+this OK.ru path. Other links may be missing or disappear at any time. The
+sampled OK.ru files had no separate subtitle tracks, so burnt-in subtitles
+cannot be translated automatically; a matching subtitle file is needed. An
+advertised 1080p upload is not proof that 720p is available. No universal
+coverage, real 1DM download, subtitle accuracy, or episode identity from visual
+review is claimed. Availability and rights remain dependent on the provider.
+
+## Remaining constraints
 
 A usable fallback requires a reachable source and a verified identity/episode
 mapping, rather than guessing by display title or concatenating absolute and
@@ -87,8 +112,8 @@ tracks and synchronized Sorani overlay on the exact video, real 720p variants,
 and 1DM/offline export where supported. Hardcoded subtitles cannot be extracted
 as text with the existing translation path. Source licensing/permissions and
 terms must be assessed before integrating a provider. Until these are verified,
-there is no proven replacement for the broken Swallowed Star source and no new
-APK should be described as fixing Donghua.
+the direct-source fallback is partial and must not be described as fixing every
+Donghua episode or providing automatic subtitles where none exist.
 
 Reproducible diagnostics: `scripts/donghua-3d-coverage-probe.mjs`,
 `scripts/donghua-research-probe.mjs`, `scripts/donghua-lm-probe.mjs` and the
