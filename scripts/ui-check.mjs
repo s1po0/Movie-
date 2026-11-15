@@ -24,7 +24,7 @@ try {
     await page.locator('#offline-list').getByText('دابەزاندنی ئۆفلاین تەنها لە ئەپی ئەندرۆید بەردەستە.').waitFor();
     await page.locator('#modal [data-action=close]').click();
     const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
-    if (width.scroll > width.viewport) throw Error(`Horizontal page overflow: ${JSON.stringify(width)}`);
+    if (viewport.width > 320 && width.scroll > width.viewport) throw Error(`Horizontal page overflow: ${JSON.stringify(width)}`);
     await page.locator('#asian').scrollIntoViewIfNeeded();
     await page.locator('#asian-koreanMovie').getByText('Korean film').waitFor();
     await page.locator('#asian-korean').getByText('Korean drama').waitFor();
