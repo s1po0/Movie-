@@ -3,7 +3,7 @@
 export function isOfflineDownloadable(url) {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && /\.(mp4|webm|m3u8)$/i.test(parsed.pathname);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && (/\.(mp4|webm|m3u8)$/i.test(parsed.pathname) || (/^vd\d+\.okcdn\.ru$/i.test(parsed.hostname) && parsed.pathname === '/' && !!parsed.search));
   } catch { return false; }
 }
 

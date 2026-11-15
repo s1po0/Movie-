@@ -90,7 +90,10 @@ public final class OfflinePlugin extends Plugin {
     @PluginMethod public void start(PluginCall call) {
         String title = call.getString("title", "").trim(), url = call.getString("url", ""), vtt = call.getString("subtitle", "");
         Uri uri = Uri.parse(url); String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(java.util.Locale.ROOT);
-        String ext = path.endsWith(".mp4") ? "mp4" : path.endsWith(".webm") ? "webm" : "";
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
+        // OK.ru's progressive MP4 URLs use a signed query on the root path.
+        boolean okDirect = host.matches("vd[0-9]+\\.okcdn\\.ru") && "/".equals(path) && uri.getEncodedQuery() != null && uri.getPort() == -1;
+        String ext = path.endsWith(".mp4") || okDirect ? "mp4" : path.endsWith(".webm") ? "webm" : "";
         if (path.endsWith(".m3u8")) {
             int maxHeight = call.getInt("maxHeight", 720);
             if (maxHeight < 1 || maxHeight > 4320) { call.reject("Invalid quality"); return; }
