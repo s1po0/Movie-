@@ -120,3 +120,13 @@ Reproducible diagnostics: `scripts/donghua-3d-coverage-probe.mjs`,
 `scripts/donghua-research-probe.mjs`, `scripts/donghua-lm-probe.mjs` and the
 matching opt-in jobs in `.github/workflows/android-apk.yml`. External providers
 change frequently; rerun rather than relying on these results indefinitely.
+
+
+## Additional mirror exploration
+
+CI `43779396427` could reach Kuriname's Swallowed Star 1–6 pages, but the
+selected OK.ru player for episode 1 did not expose a playable direct video,
+and 2–6 had no matching OK.ru iframe. The episode 125 request did not produce
+a result before the process exited, so no conclusion was reached for it.
+Anime4i advertised Dailymotion for Swallowed Star 1 and 125; the iframe alone
+does not establish direct playback. These are not added as working sources.
