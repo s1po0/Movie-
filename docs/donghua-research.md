@@ -130,3 +130,20 @@ and 2–6 had no matching OK.ru iframe. The episode 125 request did not produce
 a result before the process exited, so no conclusion was reached for it.
 Anime4i advertised Dailymotion for Swallowed Star 1 and 125; the iframe alone
 does not establish direct playback. These are not added as working sources.
+
+## Further tests after v31
+
+The full Android check `43779219032` passed: the four previously sampled
+episodes advanced, the direct Swallowed Star episode and a translated test SRT
+were exported to shared storage, and the 1DM handoff was to a fixture only.
+It does not prove the remaining catalogue works.
+
+CI `43811826225` received a Cloudflare 403 challenge from AnimeKill for all
+sampled series and episode pages; fetching a page through a research service
+is not evidence that an Android app can access it. CI `43812251561` queried
+AniChan's episode metadata and then both `fast` and `rest` sub-server tiers
+for Swallowed Star, its second part, Soul Land, Soul Land 2, Battle Through
+the Heavens, Renegade Immortal, and a Link Click control. All returned empty
+server arrays. The metadata returned counts, but those are not video links.
+Neither provider has been integrated or claimed to work. No new APK was built
+from these probes, and the v31 missing-episode limitation remains.
