@@ -31,6 +31,7 @@ try{
    await wait('1DM intent',()=>adb('logcat','-d','-s','OneDmFixture:I','*:S').includes('download=https://vd'),30000);
    adb('shell','input','keyevent','4');await sleep(2000);
    console.log('::notice title=Direct 1DM intent::Direct link handed to a fake 1DM fixture, not the real 1DM application.');
+   if (process.env.DONGHUA_SKIP_DOWNLOAD !== '1') {
    await evaluate("document.querySelector('[data-action=download-current]').click()");
    const item=await wait('direct offline download',async()=>{const {items}=await evaluate("window.Capacitor.nativePromise('Offline','list',{})");const row=items[0];if(row?.state==='failed')throw Error('Offline download failed');return row?.state==='ready'?row:null},600000);
    // Check this exact item's export rather than relying on queue completion.
@@ -41,7 +42,8 @@ try{
    adb('shell',`test -s '${base}.mp4' && test -s '${base}.srt'`);
    const exportedSrt=adb('shell',`cat '${base}.srt'`);if(!/[\u0600-\u06ff]/.test(exportedSrt)||(exportedSrt.match(/ --> /g)||[]).length!==3)throw Error('Exported test subtitle missing');
    console.log('::notice title=Direct offline export::A real direct episode and a separate translated test subtitle exported to the storage root.');
-   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify(item.id)})`);
+   await evaluate(`window.Capacitor.nativePromise('Offline','remove',${JSON.stringify({id:item.id})})`);
+   }
   }
   await evaluate("document.querySelector('[data-action=close-player]')?.click();document.querySelector('[data-action=close]')?.click()");
  }
