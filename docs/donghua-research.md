@@ -79,13 +79,14 @@ CI `43766489662` covered Link Click and Legend of Hei only, not this 3D matrix.
 An explicit LMAnime series/episode chooser now resolves the selected episode's
 English OK.ru mirror to a fresh progressive MP4 when one exists. It never
 assumes that an AniList part's local episode number matches the source's
-absolute numbering. CI `43775547210` used the Android app to search, choose and
-play Swallowed Star episode 100 and Renegade Immortal episode 1. Both advanced
-and decoded at 1920×1080. CI `43776142028` also verified a user-uploaded
+absolute numbering. CI `43778709441` used the Android app to search, choose and play Swallowed
+Star episode 100, Renegade Immortal episode 1, Soul Land 2 episode 1, and
+Battle Through the Heavens S5 episode 1. All advanced and decoded at 1920×1080. CI `43776142028` also verified a user-uploaded
 Spanish **test** subtitle translating into a Sorani track, and sent the direct
 URL to a simulated 1DM fixture, not the actual 1DM app. It downloaded/exported
-the direct episode and sample subtitle, although the last test command failed
-to quote paths containing spaces; a corrected test is running separately.
+the direct episode and sample subtitle; CI `43777402841` verified both files
+in the storage root. That test subsequently failed during test cleanup because
+it passed the wrong argument shape to the remove call; the cleanup was fixed.
 
 Coverage probe `43775995109` fetched real MP4 bytes for three Renegade Immortal
 episodes, three Soul Land 2 episodes, one Battle Through the Heavens S5
