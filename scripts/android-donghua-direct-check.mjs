@@ -48,6 +48,8 @@ try{
   await evaluate("document.querySelector('[data-action=close-player]')?.click();document.querySelector('[data-action=close]')?.click()");
  }
  await wait('catalog UI',()=>evaluate("Boolean(document.querySelector('#donghua-search'))"));
+ await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 01'});
+ await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 125'});
  await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 100',translation:true});
  await play({query:'Renegade Immortal',id:137653,title:'Renegade Immortal',ep:'Renegade Immortal Episode 01'});
  await play({query:'Soul Land',id:137683,title:'Soul Land 2: The Peerless Tang Clan',ep:'Soul Land 2: The Peerless Tang Clan Episode 01'});

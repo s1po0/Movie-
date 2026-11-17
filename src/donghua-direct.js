@@ -1,3 +1,5 @@
+import { dailymotionMedia, manifestQualityLevels } from './animecube.js';
+
 // LMAnime episode numbers belong to the chosen LMAnime series, not AniList.
 // Always show the provider's own results and episode list for explicit selection.
 const BASE = 'https://lmanime.com';
@@ -74,17 +76,49 @@ export function okVideo(html, Parser) {
   }
   throw new Error('No direct OK.ru video');
 }
-export async function lmResolveEpisode(episodeUrl, getText, Parser) {
+// The initial player and explicitly English alternate pages refer to this same
+// provider episode. Convert only recognized Dailymotion iframe shapes to the
+// canonical player form; never evaluate provider scripts or follow arbitrary URLs.
+export function lmDailymotionPlayer(html, Parser) {
+  for (const el of page(html, Parser).querySelectorAll('iframe')) {
+    for (const attr of ['src', 'data-src', 'data-litespeed-src']) try {
+      const value = el.getAttribute(attr); if (!value) continue;
+      const u = new URL(value, 'https://lmanime.com/');
+      if (u.protocol !== 'https:' || u.port || u.username || u.password) continue;
+      let id = null;
+      if (u.hostname === 'geo.dailymotion.com' && /^\/player\/x[0-9a-z]+\.html$/.test(u.pathname)) id = u.searchParams.get('video');
+      if ((u.hostname === 'www.dailymotion.com' || u.hostname === 'dailymotion.com') && /^\/embed\/video\/[a-zA-Z0-9]+$/.test(u.pathname)) id = u.pathname.split('/').pop();
+      if (!id || !/^[a-zA-Z0-9]{1,100}$/.test(id)) continue;
+      const player = new URL('https://geo.dailymotion.com/player/x19jsm.html'); player.searchParams.set('video', id); return player.href;
+    } catch { /* not an approved embed */ }
+  }
+  return null;
+}
+export async function lmResolveEpisode(episodeUrl, getText, Parser, getJson) {
   if (typeof getText !== 'function') throw new TypeError('A text requester is required');
   const ep = siteUrl(episodeUrl); if (!ep || ep.search || !/\/[^/]*episode-\d+[a-z0-9-]*\/?$/i.test(ep.pathname)) throw new Error('Invalid episode');
   const original = await getText(ep.href); const mirrors = lmMirrors(original, ep.href, Parser);
-  // Prefer the site's English mirrors, never silently substitute another episode.
+  const dmPlayers = new Set(); const firstDm = lmDailymotionPlayer(original, Parser); if (firstDm) dmPlayers.add(firstDm);
+  // Prefer a direct MP4 from the site's English mirrors.
   for (const mirror of mirrors) {
     try {
-      const mirrorHtml = await getText(mirror); const embed = lmOkEmbed(mirrorHtml, Parser);
-      if (!embed) continue;
+      const mirrorHtml = await getText(mirror); const dm = lmDailymotionPlayer(mirrorHtml, Parser); if (dm) dmPlayers.add(dm);
+      const embed = lmOkEmbed(mirrorHtml, Parser); if (!embed) continue;
       return okVideo(await getText(embed), Parser);
     } catch { /* Try another server for the same episode. */ }
+  }
+  // HLS is a fallback, not evidence of universal availability. Check the real
+  // master manifest first and never substitute a different episode or host.
+  if (typeof getJson === 'function') for (const player of dmPlayers) {
+    try {
+      const media = await dailymotionMedia(player, getJson);
+      const qualityLevels = manifestQualityLevels(await getText(media.streamUrl));
+      if (!qualityLevels.length) continue;
+      return {url:media.streamUrl, sourceTitle:'', subtitleLanguage:media.subtitleLanguage,
+        subtitles:media.subtitleTracks.map(track => ({url:track.url, language:track.language,
+          label:`Dailymotion · ${track.language}${track.language.endsWith('-auto') ? ' · خۆکار' : ''}`})),
+        qualityLevels, autoTranslateForOffline:true};
+    } catch { /* Another same-episode candidate may work. */ }
   }
   throw new Error('No supported direct source for this episode');
 }

@@ -225,9 +225,9 @@ async function playLmEpisode() {
   const session = playerSession, request = ++lmRequest, status = document.querySelector('#lm-status'), button = document.querySelector('[data-action="lm-play"]');
   if (button) button.disabled = true; if (status) status.textContent = 'گەڕان بۆ لینکی ڕاستەوخۆ...';
   try {
-    const media = await lmResolveEpisode(episode.url, lmGetText);
+    const media = await lmResolveEpisode(episode.url, lmGetText, undefined, url => subtitleHttp(url, 'json', lmHeaders));
     if (session !== playerSession || request !== lmRequest) return;
-    closePlayer(); openPlayer({id:`lm-${episode.number}`, title:episode.title, url:media.url, lmContext:context, lmIndex:Number(index)});
+    closePlayer(); openPlayer({id:`lm-${episode.number}`, title:episode.title, ...media, lmContext:context, lmIndex:Number(index)});
   } catch { if (session === playerSession && request === lmRequest && status) status.textContent = 'لینکی ڕاستەوخۆی کارا بۆ ئەم ئەڵقەیە نەدۆزرایەوە.'; }
   finally { if (button?.isConnected) button.disabled = false; }
 }
