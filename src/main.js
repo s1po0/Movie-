@@ -22,6 +22,7 @@ import { dailymotionMedia, manifestQualityLevels } from './animecube.js';
 import { donghuaEpisodeSource, donghuaEpisodeUrl } from './donghuastream.js';
 import { donghuaAnimeUrl } from './donghua-player.js';
 import { lmSearchUrl, lmSearchResults, lmEpisodes, lmResolveEpisode } from './donghua-direct.js';
+import { narulSearchUrl, narulSearchResults, narulEpisodes, narulResolveEpisode } from './narul-direct.js';
 import { DONGHUA_API, ANIME_MAPPING, DONGHUA_QUERY, donghuaVariables, donghuaCatalog, resolveDonghuaMapping } from './donghua-catalog.js';
 
 const languages = [['ckb','کوردی سۆرانی'],['en','English'],['ar','العربية'],['ku','Kurdî (Kurmancî)'],['tr','Türkçe'],['fa','فارسی'],['fr','Français'],['de','Deutsch'],['es','Español'],['hi','हिन्दी'],['ja','日本語'],['ko','한국어'],['zh-CN','中文']];
@@ -170,7 +171,7 @@ function openDonghuaAnime(item) {
   const session = playerSession, modal = document.querySelector('#player-modal');
   const url = donghuaAnimeUrl(item.anilistId, item.episode || 1);
   const episodeMax = Number.isInteger(item.episodes) ? Math.min(item.episodes, 9999) : 9999;
-  modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">DONGHUA</span><h2 dir="auto">${escapeHtml(item.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(item.title)}" sandbox="allow-scripts allow-same-origin allow-presentation" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>${item.format !== 'MOVIE' ? `<section class="episode-controls" dir="rtl" aria-labelledby="donghua-episode-title"><div class="episode-picker-head"><div><span class="episode-kicker">دۆنگھوا</span><h3 id="donghua-episode-title">ئەڵقە هەڵبژێرە</h3><p>بۆ وەرز یان بەشی تر، لە لیستی دونگھوا بگەڕێ.</p></div><div class="episode-now"><span>ئێستا</span><strong>ئەڵقەی <bdi>${item.episode || 1}</bdi></strong></div></div><div class="episode-picker-row donghua-episode-row"><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="${episodeMax}" value="${item.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="donghua-anime-play">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported"><p>ژێرنووسی بەردەست لە لیستی CCی پلەیەرەکە هەڵبژێرە. وەرگێڕانی سۆرانی لەم سەرچاوەیەدا پشتگیری ناکرێت.</p><p>ئەگەر ئەم سەرچاوەیە کار نەکرد، سەرچاوەی تر تاقی بکەرەوە. هەموو ناونیشان و ئەڵقەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><button id="donghua-vidlink" class="ghost hidden" type="button" data-action="donghua-vidlink">سەرچاوەی تر · سۆرانی</button></div><p id="donghua-alternate-status" class="player-hint" role="status">گەڕان بۆ سەرچاوەی تر...</p><details class="subtitle-panel" id="lm-panel"><summary>سەرچاوەی ڕاستەوخۆی دونگھوا · LMAnime</summary><p class="player-hint">ناونیشان و ئەڵقەی سەرچاوەکە خۆت هەڵبژێرە؛ ژمارەکردنی ئەڵقە لەگەڵ AniList جیاوازە. هەموو ئەڵقە و سێرڤەرەکان دڵنیا نین.</p><div class="sub-controls"><label>گەڕان <input id="lm-search" type="search" dir="auto" maxlength="100" value="${escapeHtml(item.title)}"></label><button class="ghost" type="button" data-action="lm-search">گەڕان</button><label>زنجیرە <select id="lm-series"><option value="">سەرەتا بگەڕێ</option></select></label><button class="ghost" type="button" data-action="lm-series">ئەڵقەکان</button><label>ئەڵقەی سەرچاوە <select id="lm-episode"><option value="">سەرەتا زنجیرە هەڵبژێرە</option></select></label><button class="primary" type="button" data-action="lm-play">پەخشی ڕاستەوخۆ</button></div><p id="lm-status" class="player-hint" role="status">ژێرنووسی چەسپاو وەرناگێڕدرێت؛ بۆ سۆرانی فایلی ژێرنووسی گونجاو بار بکە.</p></details></div>`;
+  modal.innerHTML = `<div class="player-dialog"><div class="player-head"><div><span class="overline">DONGHUA</span><h2 dir="auto">${escapeHtml(item.title)}</h2></div><button class="icon-button" data-action="close-player" aria-label="داخستن">${icon('x')}</button></div><div class="video-wrap embedded-wrap"><div id="embedded-loading" class="player-loading" role="status"><span class="loading-ring"></span><span>پلەیەرەکە بار دەکرێت...</span></div><iframe src="${url}" title="${escapeHtml(item.title)}" sandbox="allow-scripts allow-same-origin allow-presentation" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>${item.format !== 'MOVIE' ? `<section class="episode-controls" dir="rtl" aria-labelledby="donghua-episode-title"><div class="episode-picker-head"><div><span class="episode-kicker">دۆنگھوا</span><h3 id="donghua-episode-title">ئەڵقە هەڵبژێرە</h3><p>بۆ وەرز یان بەشی تر، لە لیستی دونگھوا بگەڕێ.</p></div><div class="episode-now"><span>ئێستا</span><strong>ئەڵقەی <bdi>${item.episode || 1}</bdi></strong></div></div><div class="episode-picker-row donghua-episode-row"><div class="episode-field"><label for="episode-number">ئەڵقە</label><div class="episode-stepper"><button type="button" data-episode-step="-1" aria-label="ئەڵقەی پێشوو">−</button><input id="episode-number" type="number" inputmode="numeric" min="1" max="${episodeMax}" value="${item.episode || 1}"><button type="button" data-episode-step="1" aria-label="ئەڵقەی دواتر">+</button></div></div><button class="primary episode-play" type="button" data-action="donghua-anime-play">${icon('play')} سەیرکردن</button></div></section>` : ''}<p id="embedded-status" class="player-message" role="status">پلەیەرەکە بار دەکرێت...</p><div class="offline-unsupported"><p>ژێرنووسی بەردەست لە لیستی CCی پلەیەرەکە هەڵبژێرە. وەرگێڕانی سۆرانی لەم سەرچاوەیەدا پشتگیری ناکرێت.</p><p>ئەگەر ئەم سەرچاوەیە کار نەکرد، سەرچاوەی تر تاقی بکەرەوە. هەموو ناونیشان و ئەڵقەکان دڵنیانین.</p></div><div class="player-actions"><button class="ghost" type="button" data-action="retry-player">دووبارە بارکردنەوە</button><button class="ghost" type="button" data-action="one-dm">کردنەوە لە 1DM</button><button id="donghua-vidlink" class="ghost hidden" type="button" data-action="donghua-vidlink">سەرچاوەی تر · سۆرانی</button></div><p id="donghua-alternate-status" class="player-hint" role="status">گەڕان بۆ سەرچاوەی تر...</p><details class="subtitle-panel" id="lm-panel"><summary>سەرچاوەی ڕاستەوخۆی دونگھوا</summary><p class="player-hint">ناونیشان و ئەڵقەی سەرچاوەکە خۆت هەڵبژێرە؛ ژمارەکردنی ئەڵقە لەگەڵ AniList جیاوازە. هەموو ئەڵقە و سێرڤەرەکان دڵنیا نین.</p><div class="sub-controls"><label>سەرچاوە <select id="lm-provider"><option value="lm">LMAnime</option><option value="narul">Narul Donghua</option></select></label><label>گەڕان <input id="lm-search" type="search" dir="auto" maxlength="100" value="${escapeHtml(item.title)}"></label><button class="ghost" type="button" data-action="lm-search">گەڕان</button><label>زنجیرە <select id="lm-series"><option value="">سەرەتا بگەڕێ</option></select></label><button class="ghost" type="button" data-action="lm-series">ئەڵقەکان</button><label>ئەڵقەی سەرچاوە <select id="lm-episode"><option value="">سەرەتا زنجیرە هەڵبژێرە</option></select></label><button class="primary" type="button" data-action="lm-play">پەخشی ڕاستەوخۆ</button></div><p id="lm-status" class="player-hint" role="status">ژێرنووسی چەسپاو وەرناگێڕدرێت؛ بۆ سۆرانی فایلی ژێرنووسی گونجاو بار بکە.</p></details></div>`;
   modal.classList.remove('hidden'); document.body.classList.add('modal-open'); paintIcons();
   const frame = modal.querySelector('iframe'); startEmbeddedPlayer(frame, session);
   frame.addEventListener('load', () => { if (session !== playerSession) return; modal.querySelector('#embedded-loading')?.classList.add('hidden'); modal.querySelector('#embedded-status').textContent = 'دوگمەی پەخش لە ناو پلەیەرەکە دابگرە.'; });
@@ -194,9 +195,11 @@ async function searchLm() {
   const button = document.querySelector('[data-action="lm-search"]'); button.disabled = true;
   status.textContent = 'گەڕان لە سەرچاوە...';
   try {
-    const results = lmSearchResults(await lmGetText(lmSearchUrl(document.querySelector('#lm-search').value)));
+    const provider = document.querySelector('#lm-provider')?.value === 'narul' ? 'narul' : 'lm';
+    const query = document.querySelector('#lm-search').value;
+    const results = provider === 'narul' ? narulSearchResults(await lmGetText(narulSearchUrl(query))) : lmSearchResults(await lmGetText(lmSearchUrl(query)));
     if (session !== playerSession || request !== lmRequest) return;
-    current.lmResults = results; current.lmContext = null;
+    current.lmResults = results; current.lmProvider = provider; current.lmContext = null;
     document.querySelector('#lm-series').innerHTML = '<option value="">زنجیرە هەڵبژێرە</option>' + results.map((x,i) => `<option value="${i}">${escapeHtml(x.title)}</option>`).join('');
     document.querySelector('#lm-episode').innerHTML = '<option value="">سەرەتا زنجیرە هەڵبژێرە</option>';
     status.textContent = results.length ? 'زنجیرەی دروست هەڵبژێرە و ئەڵقەکان دابگرە.' : 'هیچ زنجیرەیەک نەدۆزرایەوە؛ ناوێکی تر تاقی بکەرەوە.';
@@ -210,9 +213,11 @@ async function loadLmSeries() {
   const session = playerSession, request = ++lmRequest, status = document.querySelector('#lm-status'), button = document.querySelector('[data-action="lm-series"]');
   current.lmContext = null; button.disabled = true; status.textContent = 'بارکردنی ئەڵقەکان...';
   try {
-    const episodes = lmEpisodes(await lmGetText(series.url), series.url);
+    const provider = current.lmProvider === 'narul' ? 'narul' : 'lm';
+    const html = await lmGetText(series.url);
+    const episodes = provider === 'narul' ? narulEpisodes(html, series.url) : lmEpisodes(html, series.url);
     if (session !== playerSession || request !== lmRequest) return;
-    current.lmContext = {series, episodes, original: { ...current, lmResults:undefined, lmContext:undefined }};
+    current.lmContext = {series, episodes, provider, original: { ...current, lmResults:undefined, lmContext:undefined }};
     document.querySelector('#lm-episode').innerHTML = '<option value="">ئەڵقە هەڵبژێرە</option>' + episodes.map((x,i) => `<option value="${i}">${escapeHtml(x.title)}</option>`).join('');
     status.textContent = episodes.length ? `${episodes.length} ئەڵقە لە سەرچاوەکەدا؛ پەخشی هەموویان دڵنیا نییە.` : 'هیچ ئەڵقەیەک نەدۆزرایەوە.';
   } catch { if (session === playerSession && request === lmRequest) status.textContent = 'لیستی ئەڵقەکان بار نەبوو.'; }
@@ -225,7 +230,8 @@ async function playLmEpisode() {
   const session = playerSession, request = ++lmRequest, status = document.querySelector('#lm-status'), button = document.querySelector('[data-action="lm-play"]');
   if (button) button.disabled = true; if (status) status.textContent = 'گەڕان بۆ لینکی ڕاستەوخۆ...';
   try {
-    const media = await lmResolveEpisode(episode.url, lmGetText, undefined, url => subtitleHttp(url, 'json', lmHeaders));
+    const resolver = context.provider === 'narul' ? narulResolveEpisode : lmResolveEpisode;
+    const media = await resolver(episode.url, lmGetText, undefined, url => subtitleHttp(url, 'json', lmHeaders));
     if (session !== playerSession || request !== lmRequest) return;
     closePlayer(); openPlayer({id:`lm-${episode.number}`, title:episode.title, ...media, lmContext:context, lmIndex:Number(index)});
   } catch { if (session === playerSession && request === lmRequest && status) status.textContent = 'لینکی ڕاستەوخۆی کارا بۆ ئەم ئەڵقەیە نەدۆزرایەوە.'; }
@@ -985,6 +991,12 @@ app.addEventListener('input', e => {
   donghuaTimer = setTimeout(() => loadDonghua(1), 400);
 });
 app.addEventListener('change', async e => {
+  if (e.target.id === 'lm-provider' && current?.animePlayer) {
+    lmRequest++; current.lmResults = []; current.lmContext = null; current.lmProvider = e.target.value;
+    document.querySelector('#lm-series').innerHTML = '<option value="">سەرەتا بگەڕێ</option>';
+    document.querySelector('#lm-episode').innerHTML = '<option value="">سەرەتا زنجیرە هەڵبژێرە</option>';
+    document.querySelector('#lm-status').textContent = 'سەرچاوەکە گۆڕا؛ دووبارە بگەڕێ.';
+  }
   if (e.target.id === 'donghua-kind') { donghuaKind = e.target.value; clearTimeout(donghuaTimer); resetDonghuaResults(); loadDonghua(1); }
   if (e.target.id === 'embedded-language') embeddedSubtitles?.setTarget(e.target.value);
   if (e.target.id === 'embedded-subtitle-file') {

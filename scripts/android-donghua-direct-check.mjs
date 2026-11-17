@@ -7,9 +7,9 @@ try{
  const ws=new URL(page.webSocketDebuggerUrl);ws.host='127.0.0.1:9222';socket=new WebSocket(ws.href);await new Promise((ok,no)=>{socket.onopen=ok;socket.onerror=no});let seq=0,pending=new Map();socket.onmessage=e=>{const d=JSON.parse(e.data),p=pending.get(d.id);if(!p)return;pending.delete(d.id);d.error?p.reject(Error(d.error.message)):p.resolve(d.result)};
  const evaluate=expression=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve:r=>r.exceptionDetails?reject(Error(r.exceptionDetails.text)):resolve(r.result.value),reject});socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{expression,awaitPromise:true,returnByValue:true,userGesture:true}}))});
  const wait=async(name,fn,timeout=90000)=>{const end=Date.now()+timeout;while(Date.now()<end){try{const v=await fn();if(v)return v}catch{}await sleep(1000)}throw Error('Timeout: '+name+'; status='+await evaluate("document.querySelector('#lm-status')?.textContent||document.querySelector('#donghua-status')?.textContent||''"))};
- async function play({query,id,title,ep,translation=false}){
+ async function play({query,id,title,ep,translation=false,provider='lm'}){
   await evaluate(`{const s=document.querySelector('#donghua-search');s.value=${JSON.stringify(query)};s.dispatchEvent(new Event('input',{bubbles:true}));}`);
-  await wait('AniList result '+id,()=>evaluate(`Boolean(document.querySelector('[data-play="donghua-${id}"]'))`));await evaluate(`document.querySelector('[data-play="donghua-${id}"]').click(); document.querySelector('#lm-panel').open=true; document.querySelector('#lm-search').value=${JSON.stringify(query)}; document.querySelector('[data-action="lm-search"]').click()`);
+  await wait('AniList result '+id,()=>evaluate(`Boolean(document.querySelector('[data-play="donghua-${id}"]'))`));await evaluate(`document.querySelector('[data-play="donghua-${id}"]').click(); document.querySelector('#lm-panel').open=true; document.querySelector('#lm-provider').value=${JSON.stringify(provider)};document.querySelector('#lm-provider').dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('#lm-search').value=${JSON.stringify(query)}; document.querySelector('[data-action="lm-search"]').click()`);
   await wait('LM search '+title,()=>evaluate(`Array.from(document.querySelector('#lm-series').options).some(o=>o.textContent===${JSON.stringify(title)})`));
   await evaluate(`{let s=document.querySelector('#lm-series');s.value=Array.from(s.options).find(o=>o.textContent===${JSON.stringify(title)}).value;document.querySelector('[data-action="lm-series"]').click()}`);
   await wait('LM episode '+ep,()=>evaluate(`Array.from(document.querySelector('#lm-episode').options).some(o=>o.textContent===${JSON.stringify(ep)})`));
@@ -48,8 +48,8 @@ try{
   await evaluate("document.querySelector('[data-action=close-player]')?.click();document.querySelector('[data-action=close]')?.click()");
  }
  await wait('catalog UI',()=>evaluate("Boolean(document.querySelector('#donghua-search'))"));
- await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 01'});
- await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 125'});
+ await play({query:'Swallowed Star',id:117012,title:'Swallowed Star [Tunshi Xing Kong]',ep:'Swallowed Star Episode 01 English Sub',provider:'narul'});
+ await play({query:'Swallowed Star',id:117012,title:'Swallowed Star Season 2',ep:'Swallowed Star Episode 125 English Sub',provider:'narul'});
  await play({query:'Swallowed Star',id:117012,title:'Swallowed Star',ep:'Swallowed Star Episode 100',translation:true});
  await play({query:'Renegade Immortal',id:137653,title:'Renegade Immortal',ep:'Renegade Immortal Episode 01'});
  await play({query:'Soul Land',id:137683,title:'Soul Land 2: The Peerless Tang Clan',ep:'Soul Land 2: The Peerless Tang Clan Episode 01'});
