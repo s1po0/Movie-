@@ -54,4 +54,4 @@ try{
  await play({query:'Renegade Immortal',id:137653,title:'Renegade Immortal',ep:'Renegade Immortal Episode 01'});
  await play({query:'Soul Land',id:137683,title:'Soul Land 2: The Peerless Tang Clan',ep:'Soul Land 2: The Peerless Tang Clan Episode 01'});
  await play({query:'Battle Through the Heavens',id:137728,title:'Battle Through the Heavens Season 5',ep:'Battle Through the Heavens Season 5 Episode 01'});
-}catch(e){console.log('::error title=Android direct Donghua::'+(stage+': '+String(e.message)).slice(0,400));process.exitCode=1}finally{socket?.close()}
+}catch(e){console.log('::error title=Android direct Donghua::'+(stage+': '+String(e.message)).slice(0,400));try{console.log('::notice title=Android test process::'+JSON.stringify({pid:adb('shell','pidof','app.dimo.movies').trim(),activity:adb('shell','dumpsys','activity','activities').match(/mResumedActivity[^\n]*/)?.[0]||''}).replace(/%/g,'%25'))}catch{}process.exitCode=1}finally{socket?.close()}
