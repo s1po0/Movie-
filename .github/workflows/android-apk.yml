@@ -1383,4 +1383,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/donghua-embedrise-probe.mjs
+      - run: npm ci && node scripts/donghua-embedrise-probe.mjs
