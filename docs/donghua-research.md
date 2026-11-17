@@ -147,3 +147,22 @@ the Heavens, Renegade Immortal, and a Link Click control. All returned empty
 server arrays. The metadata returned counts, but those are not video links.
 Neither provider has been integrated or claimed to work. No new APK was built
 from these probes, and the v31 missing-episode limitation remains.
+
+## Additional source experiment (not released)
+
+The branch now includes an explicitly selected Narul Donghua source, alongside
+LMAnime. It lists the provider's own series and episodes and does not silently
+map seasons across catalogues. It parses only English-labelled Dailymotion
+embeds, validates the metadata and short-lived HLS host, and checks the master
+manifest before opening it. LMAnime also tries its same-episode Dailymotion
+player if no supported OK.ru MP4 is found. Neither source guarantees playback.
+
+CI `44192396096` obtained complete Dailymotion master and variant manifests
+and a video segment for Narul's Swallowed Star episode 1 and episode 125. The
+masters advertised only 512x288 for these checks; this was not playback or a
+720p result. Other CI attempts received HTTP 403 for the same manifests. In
+Android CI `44198711217`, the existing four OK.ru sample episodes played,
+but both Narul examples reported unavailable, so **no new Dailymotion episode
+was verified playing on Android**. The underlying cause of the intermittent
+HTTP responses is not established. A new APK must not be presented as fixing
+all Donghua based on these experiments. The existing v31 is unchanged.
