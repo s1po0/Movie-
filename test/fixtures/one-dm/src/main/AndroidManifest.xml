@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application android:label="1DM intent test fixture" android:theme="@android:style/Theme.Material.NoActionBar">
+    <activity android:name="idm.internet.download.manager.Downloader" android:exported="true" />
+    <activity android:name="acr.browser.lightning.activity.BrowserLauncher" android:exported="true" />
+  </application>
+</manifest>

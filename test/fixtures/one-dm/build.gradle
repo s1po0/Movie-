@@ -1,0 +1,7 @@
+plugins { id 'com.android.application' version '8.7.2' }
+
+android {
+    namespace 'idm.internet.download.manager'
+    compileSdk 35
+    defaultConfig { applicationId 'idm.internet.download.manager'; minSdk 23; targetSdk 35; versionCode 1; versionName '1' }
+}
